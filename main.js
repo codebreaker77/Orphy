@@ -17,8 +17,8 @@ let isDocked = true;
 
 const ISLAND_WIDTH = 432;
 const ISLAND_HEIGHT = 135;
-const BUNNY_WIDTH = 130;
-const BUNNY_HEIGHT = 150;
+const BUNNY_WIDTH = 140;
+const BUNNY_HEIGHT = 160;
 
 function createWindows() {
   const primaryDisplay = screen.getPrimaryDisplay();

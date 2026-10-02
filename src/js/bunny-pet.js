@@ -8,33 +8,25 @@ class BunnyPet {
     this.x = 35;
     this.y = 40;
     
-    // States: 'idle', 'dancing', 'happy', 'sleeping', 'dangling', 'hopping', 'climb_ladder', 'jetpack', 'pocket_ladder', 'pocket_jetpack'
+    // States: 'idle', 'dancing', 'happy', 'sleeping', 'dangling', 'jetpack', 'pocket_jetpack'
     this.state = 'idle';
     this.frame = 0;
     this.frameTimer = 0;
     this.facing = 1; // 1 = right, -1 = left
+    this.tiltAngle = 0; // Flight banking angle
     
     this.themeColor = '#e64c65';
     this.particles = [];
     this.isDragging = false;
     
-    // Ladder extension animation properties
-    this.ladderActive = false;
-    this.ladderHeight = 0;
-    this.targetLadderHeight = 0;
-    this.ladderX = 15;
-    
-    // Jetpack flame pulse
+    // Jetpack Flight Properties
     this.jetpackActive = false;
     this.jetpackTimer = 0;
-
-    // Recall State Machine
     this.recallActive = false;
+    this.flightCurve = null;
     this.screenBounds = { x: 0, y: 0, width: 1920, height: 1080 };
     
     // Lifelike timers
-    this.blinkTimer = 2500 + Math.random() * 2000;
-    this.isBlinking = false;
     this.bouncePhase = 0;
     this.particleTimer = 0;
     this.happyTimer = 0;
@@ -51,8 +43,7 @@ class BunnyPet {
     // Palette:
     // . = trans, 1 = outline (#0e111a), 2 = skin (#fbf3ea), 3 = ear pink (#ff7997), 4 = eye (#0f121d)
     // 5 = blush (#ff96af), 6 = hoodie (#1e2434), 7 = accent, 8 = mouth (#e04268), 9 = white, H = earcup (#2b3449)
-    // J = jetpack steel (#64748b), K = jetpack nozzle (#334155), V = visor blue (#38bdf8)
-    // L = ladder rail (#92400e), R = ladder rung (#d97706)
+    // J = jetpack steel (#64748b), K = jetpack nozzle (#334155), V = visor blue (#38bdf8), F = flame (#ffea00)
 
     // IDLE Frame 0
     const IDLE_0 = [
@@ -114,7 +105,7 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
-    // DANCING / HOPPING Frames
+    // DANCING Frames
     const DANCING_0 = [
       ".......11......11.......",
       "......1231....1321......",
@@ -231,7 +222,7 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
-    // DANGLING Frame (Picked up by mouse drag)
+    // DANGLING (Mouse Drag)
     const DANGLING = [
       "........11......11......",
       ".......1231....1321.....",
@@ -261,7 +252,7 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
-    // PULLING OUT ITEM FROM HOODIE POCKET
+    // POCKET ACTION (Equipping jetpack)
     const POCKET_ACTION = [
       "........11......11......",
       ".......1231....1321.....",
@@ -277,7 +268,7 @@ class BunnyPet {
       "......16611111111661....",
       ".....1666666666666661...",
       "....166666666666666661..",
-      "....166662222226666661..", // paw inside front kangaroo pocket!
+      "....166662222226666661..",
       "....122162222226661221..",
       ".....1116666666666111...",
       "......16666666666661....",
@@ -291,77 +282,18 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
-    // CLIMBING LADDER (Turned toward ladder, paws gripping rungs)
-    const CLIMB_0 = [
-      "........................",
-      ".........11......11.....",
-      "........1231....1321....",
-      ".......11231....13211...",
-      "......1HH1211111121HH1..",
-      ".....1H77H12222221H77H1.",
-      "....12217H22222222H71221", // arms reaching up!
-      "....11111124222242111111",
-      "......11252222225211....",
-      ".......122228822221.....",
-      "......16611111111661....",
-      ".....1666666666666661...",
-      ".....1666666666666661...",
-      "......16666666666661....",
-      "......16666666666661....",
-      ".......166661166661.....",
-      ".......16661..16661.....",
-      "......19991....1661.....", // left foot stepped up!
-      "......11111....1661.....",
-      "................19991...",
-      "................11111...",
-      "........................",
-      "........................",
-      "........................",
-      "........................",
-      "........................"
-    ].join('\n');
-
-    const CLIMB_1 = [
-      "........................",
-      ".........11......11.....",
-      "........1231....1321....",
-      ".......11231....13211...",
-      "......1HH1211111121HH1..",
-      ".....1H77H12222221H77H1.",
-      "....12217H22222222H71221",
-      "....11111124222242111111",
-      "......11252222225211....",
-      ".......122228822221.....",
-      "......16611111111661....",
-      ".....1666666666666661...",
-      ".....1666666666666661...",
-      "......16666666666661....",
-      "......16666666666661....",
-      ".......166661166661.....",
-      ".......16661..16661.....",
-      ".......1661....19991....", // right foot stepped up!
-      ".......1661....11111....",
-      "......19991.............",
-      "......11111.............",
-      "........................",
-      "........................",
-      "........................",
-      "........................",
-      "........................"
-    ].join('\n');
-
-    // JETPACK HOVER FLIGHT (Cool goggles, thruster tanks firing!)
+    // JETPACK FLIGHT Frame 0 (Cool blue goggles, twin steel tanks)
     const JETPACK_0 = [
       "........11......11......",
       ".......1231....1321.....",
       "......11231....13211....",
       ".....1HH1211111121HH1...",
       "....1H77H12222221H77H1..",
-      "...1J177H1VVVVVV1H771J1.", // cool blue flight goggles!
-      "..1JJJ1112VVVVVV2111JJJ1", // twin steel jetpack tanks!
+      "...1J177H1VVVVVV1H771J1.",
+      "..1JJJ1112VVVVVV2111JJJ1",
       "..1JJJ12522222225211JJJ1",
       "..1JJJ11222288222211JJJ1",
-      "...1K1.112222222211.1K1.", // jet thruster nozzles!
+      "...1K1.112222222211.1K1.",
       "...1K1166111111116611K1.",
       "....166666666666666661..",
       "....122166666666661221..",
@@ -380,7 +312,37 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
-    // HAPPY victory pose
+    // JETPACK FLIGHT Frame 1 (Thruster burst)
+    const JETPACK_1 = [
+      "........11......11......",
+      ".......1231....1321.....",
+      "......11231....13211....",
+      ".....1HH1211111121HH1...",
+      "....1H77H12222221H77H1..",
+      "...1J177H1VVVVVV1H771J1.",
+      "..1JJJ1112VVVVVV2111JJJ1",
+      "..1JJJ12522222225211JJJ1",
+      "..1JJJ11222288222211JJJ1",
+      "...1K1.112222222211.1K1.",
+      "...1K1166111111116611K1.",
+      "....166666666666666661..",
+      "....122166666666661221..",
+      ".....1116666666666111...",
+      "......16666666666661....",
+      ".......166661166661.....",
+      "........1661..1661......",
+      "........1991..1991......",
+      "........1111..1111......",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................"
+    ].join('\n');
+
+    // HAPPY victory
     const HAPPY_0 = [
       ".....1221......1221.....",
       ".....1111......1111.....",
@@ -413,12 +375,9 @@ class BunnyPet {
     this.sprites = {
       idle: [IDLE_0, IDLE_1],
       dancing: [DANCING_0, DANCING_1, DANCING_2, DANCING_3],
-      hopping: [DANCING_0, DANCING_1, DANCING_2, DANCING_3],
       dangling: [DANGLING],
-      pocket_ladder: [POCKET_ACTION],
       pocket_jetpack: [POCKET_ACTION],
-      climb_ladder: [CLIMB_0, CLIMB_1],
-      jetpack: [JETPACK_0],
+      jetpack: [JETPACK_0, JETPACK_1],
       happy: [HAPPY_0, DANCING_1]
     };
   }
@@ -437,9 +396,9 @@ class BunnyPet {
       }
 
       this.isDragging = true;
-      this.recallActive = false; // Cancel any active recall
-      this.ladderActive = false;
+      this.recallActive = false; // Cancel any active recall flight
       this.jetpackActive = false;
+      this.tiltAngle = 0;
       this.state = 'dangling';
       this.canvas.style.cursor = 'grabbing';
     });
@@ -464,7 +423,6 @@ class BunnyPet {
       }
     });
 
-    // Poke / Click
     this.canvas.addEventListener('click', () => {
       if (!this.isDragging && !this.recallActive) {
         this.triggerHappy();
@@ -487,245 +445,148 @@ class BunnyPet {
     });
 
     window.orphy.onStartRecall((data) => {
-      console.log('[Orphy Bunny] Recall signal received! Starting animated journey...');
-      this.startRecallSequence(data);
+      console.log('[Orphy Bunny] Recall signal received! Starting Curvy Jetpack Flight...');
+      this.startCurvyJetpackFlight(data);
     });
   }
 
   // ========================================================
-  // RECALL PATHFINDING ORCHESTRATION
+  // SMOOTH CURVY JETPACK FLIGHT PATH
   // ========================================================
-  async startRecallSequence(data) {
+  async startCurvyJetpackFlight(data) {
     if (this.isDragging) return;
     this.recallActive = true;
-    this.ladderActive = false;
-    this.jetpackActive = false;
 
     const currentPos = await window.orphy.getBunnyPosition();
     const targetPos = { x: data.targetX, y: data.targetY };
     const bounds = data.screenBounds || { x: 0, y: 0, width: 1920, height: 1080 };
     this.screenBounds = bounds;
 
-    // RULE 1: ALWAYS travel to the side wall first!
-    // Pick the screen side closest to the island
-    const isIslandOnLeft = (targetPos.x < bounds.x + bounds.width / 2);
-    const wallX = isIslandOnLeft ? bounds.x + 8 : bounds.x + bounds.width - 138;
-
-    console.log(`[Recall Stage 1] Hopping to screen edge at X=${wallX}...`);
-    await this.hopHorizontallyTo(currentPos.x, wallX, currentPos.y);
-    if (!this.recallActive) return;
-
-    // RULE 2: At screen edge, check height difference:
-    // If island is ABOVE: Ladder
-    // If island is BELOW: Jetpack
-    const deltaY = targetPos.y - currentPos.y;
-    console.log(`[Recall Stage 2] At screen edge. deltaY = ${deltaY}`);
-
-    if (deltaY < -25) {
-      // ISLAND IS ABOVE -> LADDER CLIMB!
-      console.log('[Recall Stage 2A] Island is UP! Deploying ladder...');
-      await this.climbLadderSequence(wallX, currentPos.y, targetPos.y);
-    } else if (deltaY > 25) {
-      // ISLAND IS BELOW -> JETPACK DESCENT!
-      console.log('[Recall Stage 2B] Island is DOWN! Igniting jetpack...');
-      await this.jetpackDescentSequence(wallX, currentPos.y, targetPos.y);
-    } else {
-      // Same level: brief prep pause
-      await this.sleep(300);
+    // Check if already practically at destination
+    const totalDist = Math.hypot(targetPos.x - currentPos.x, targetPos.y - currentPos.y);
+    if (totalDist < 30) {
+      this.triggerHappy();
+      this.spawnHeartBurst();
+      this.recallActive = false;
+      if (window.orphy && window.orphy.bunnyDocked) window.orphy.bunnyDocked();
+      return;
     }
+
+    // Step 1: Pull out jetpack from hoodie pocket & equip goggles
+    this.state = 'pocket_jetpack';
+    this.tiltAngle = 0;
+    await this.sleep(350);
     if (!this.recallActive) return;
 
-    // RULE 3: Hop horizontally from edge to island
-    console.log(`[Recall Stage 3] Hopping from edge X=${wallX} to island dock X=${targetPos.x}...`);
-    await this.hopHorizontallyTo(wallX, targetPos.x, targetPos.y);
+    // Step 2: Ignite Jetpack!
+    this.state = 'jetpack';
+    this.jetpackActive = true;
+    this.spawnJetpackBurst();
+    await this.sleep(200);
     if (!this.recallActive) return;
 
-    // DOCK CELEBRATION!
-    console.log('[Recall Stage 4] Docked at island! Celebrating...');
-    this.recallActive = false;
-    this.ladderActive = false;
-    this.jetpackActive = false;
-    this.state = 'happy';
-    this.triggerHappy();
-    this.spawnHeartBurst();
+    // Step 3: Generate a random, smooth organic Bezier flight curve
+    const dx = targetPos.x - currentPos.x;
+    const dy = targetPos.y - currentPos.y;
     
-    if (window.orphy && window.orphy.bunnyDocked) {
-      window.orphy.bunnyDocked();
-    }
-  }
+    // Perpendicular normal vector for swooping arc
+    const nx = -dy / totalDist;
+    const ny = dx / totalDist;
 
-  // ========================================================
-  // RHYTHMIC HORIZONTAL HOPPING (Paced, bouncy, characterful)
-  // ========================================================
-  async hopHorizontallyTo(startX, targetX, fixedY) {
-    const totalDist = Math.abs(targetX - startX);
-    if (totalDist < 5) return;
+    // Randomize curvature: graceful swoop (either high arc or looping curve)
+    const arcDirection = (Math.random() > 0.5 ? 1 : -1);
+    const curvatureMagnitude1 = totalDist * (0.25 + Math.random() * 0.25);
+    const curvatureMagnitude2 = totalDist * (0.15 + Math.random() * 0.25) * (Math.random() > 0.4 ? 1 : -0.6);
 
-    this.facing = targetX > startX ? 1 : -1;
-    this.state = 'hopping';
+    const P0 = { x: currentPos.x, y: currentPos.y };
+    const P1 = {
+      x: Math.round(currentPos.x + dx * 0.28 + nx * (arcDirection * curvatureMagnitude1)),
+      y: Math.round(currentPos.y + dy * 0.28 + ny * (arcDirection * curvatureMagnitude1))
+    };
+    const P2 = {
+      x: Math.round(currentPos.x + dx * 0.72 + nx * (arcDirection * curvatureMagnitude2)),
+      y: Math.round(currentPos.y + dy * 0.72 + ny * (arcDirection * curvatureMagnitude2))
+    };
+    const P3 = { x: targetPos.x, y: targetPos.y };
 
-    // Paced hops: Each hop covers ~40px and takes 380ms
-    const hopDistance = 40;
-    const numHops = Math.max(1, Math.ceil(totalDist / hopDistance));
-    const stepSize = (targetX - startX) / numHops;
+    // Clamp control points inside screen bounds (+ buffer) so flight stays visible
+    const pad = 30;
+    P1.x = Math.max(bounds.x + pad, Math.min(bounds.x + bounds.width - 150, P1.x));
+    P1.y = Math.max(bounds.y + pad, Math.min(bounds.y + bounds.height - 180, P1.y));
+    P2.x = Math.max(bounds.x + pad, Math.min(bounds.x + bounds.width - 150, P2.x));
+    P2.y = Math.max(bounds.y + pad, Math.min(bounds.y + bounds.height - 180, P2.y));
 
-    for (let i = 0; i < numHops; i++) {
-      if (!this.recallActive || this.isDragging) return;
-      
-      const hopStart = startX + stepSize * i;
-      const hopEnd = startX + stepSize * (i + 1);
-      await this.performSingleHop(hopStart, hopEnd, fixedY, 360);
-      
-      // Little puff of dust on landing
-      this.spawnDust(this.facing === 1 ? -6 : 6);
-    }
+    // Smooth duration: Paced, majestic flight (~2.2s to 3.8s depending on distance)
+    const flightDuration = Math.max(2200, Math.min(3800, totalDist * 2.6));
+    const flightStart = performance.now();
 
-    if (window.orphy && window.orphy.setBunnyPosition) {
-      window.orphy.setBunnyPosition(targetX, fixedY);
-    }
-  }
-
-  performSingleHop(fromX, toX, y, durationMs) {
-    return new Promise((resolve) => {
-      const startTime = performance.now();
-      
-      const hopStep = (now) => {
+    await new Promise((resolve) => {
+      const flyStep = (now) => {
         if (!this.recallActive || this.isDragging) {
           resolve();
           return;
         }
 
-        const elapsed = now - startTime;
-        const t = Math.min(1, elapsed / durationMs);
+        const elapsed = now - flightStart;
+        const rawT = Math.min(1, elapsed / flightDuration);
+        
+        // Smooth Ease-in-out curve
+        const t = rawT < 0.5 ? 2 * rawT * rawT : -1 + (4 - 2 * rawT) * rawT;
 
-        // Parabolic arc for hop: 0 -> peak -> 0
-        const arcY = -16 * Math.sin(t * Math.PI);
-        const curX = Math.round(fromX + (toX - fromX) * t);
-        const curY = Math.round(y + arcY);
+        // Cubic Bezier interpolation
+        const u = 1 - t;
+        const curX = Math.round(
+          u * u * u * P0.x +
+          3 * u * u * t * P1.x +
+          3 * u * t * t * P2.x +
+          t * t * t * P3.x
+        );
+        const curY = Math.round(
+          u * u * u * P0.y +
+          3 * u * u * t * P1.y +
+          3 * u * t * t * P2.y +
+          t * t * t * P3.y
+        );
+
+        // Calculate velocity tangent for banking tilt and facing direction
+        const dXdt = 3 * u * u * (P1.x - P0.x) + 6 * u * t * (P2.x - P1.x) + 3 * t * t * (P3.x - P2.x);
+        const dYdt = 3 * u * u * (P1.y - P0.y) + 6 * u * t * (P2.y - P1.y) + 3 * t * t * (P3.y - P2.y);
+        
+        this.facing = dXdt >= 0 ? 1 : -1;
+        // Subtle banking angle (tilt into the flight curve)
+        const angle = Math.atan2(dYdt, Math.abs(dXdt));
+        this.tiltAngle = Math.max(-0.25, Math.min(0.25, angle * 0.4));
 
         window.orphy.setBunnyPosition(curX, curY);
 
-        if (t < 1) {
-          requestAnimationFrame(hopStep);
+        if (rawT < 1) {
+          requestAnimationFrame(flyStep);
         } else {
           resolve();
         }
       };
 
-      requestAnimationFrame(hopStep);
+      requestAnimationFrame(flyStep);
     });
-  }
 
-  // ========================================================
-  // LADDER SEQUENCE: Pull from pocket -> Extend -> Climb -> Fold
-  // ========================================================
-  async climbLadderSequence(x, startY, endY) {
-    // 1. Pull out ladder from hoodie pocket
-    this.state = 'pocket_ladder';
-    this.facing = (x < this.screenBounds.width / 2) ? 1 : -1;
-    await this.sleep(400);
     if (!this.recallActive) return;
 
-    // 2. Extend ladder up to target height
-    this.ladderActive = true;
-    this.ladderHeight = 10;
-    this.targetLadderHeight = 110;
-    
-    // Animate ladder extending rungs upward
-    const extendStart = performance.now();
-    const extendDuration = 550;
-    await new Promise((res) => {
-      const ext = (now) => {
-        const t = Math.min(1, (now - extendStart) / extendDuration);
-        this.ladderHeight = 10 + (this.targetLadderHeight - 10) * t;
-        if (t < 1 && this.recallActive) requestAnimationFrame(ext);
-        else res();
-      };
-      requestAnimationFrame(ext);
-    });
-    if (!this.recallActive) return;
-
-    // 3. Climb the ladder up
-    this.state = 'climb_ladder';
-    const climbDist = Math.abs(startY - endY);
-    // Natural climb speed: ~70px per second
-    const climbDuration = Math.max(800, (climbDist / 70) * 1000);
-    const climbStart = performance.now();
-
-    await new Promise((res) => {
-      const stepClimb = (now) => {
-        if (!this.recallActive || this.isDragging) { res(); return; }
-        const elapsed = now - climbStart;
-        const t = Math.min(1, elapsed / climbDuration);
-
-        const curY = Math.round(startY + (endY - startY) * t);
-        window.orphy.setBunnyPosition(x, curY);
-
-        if (t < 1) {
-          requestAnimationFrame(stepClimb);
-        } else {
-          res();
-        }
-      };
-      requestAnimationFrame(stepClimb);
-    });
-    if (!this.recallActive) return;
-
-    // 4. At top: fold ladder back into pocket
-    this.state = 'pocket_ladder';
-    this.ladderActive = false;
-    this.spawnSparkle();
-    await this.sleep(350);
-  }
-
-  // ========================================================
-  // JETPACK SEQUENCE: Equip -> Ignite -> Float Down -> Touchdown
-  // ========================================================
-  async jetpackDescentSequence(x, startY, endY) {
-    // 1. Pull out jetpack from hoodie pocket & snap on!
-    this.state = 'pocket_jetpack';
-    await this.sleep(400);
-    if (!this.recallActive) return;
-
-    // 2. Thrusters Ignite!
-    this.state = 'jetpack';
-    this.jetpackActive = true;
-    this.spawnJetpackFlames();
-    await this.sleep(250);
-    if (!this.recallActive) return;
-
-    // 3. Float down smoothly with thrusters roaring
-    const descentDist = Math.abs(endY - startY);
-    // Smooth descent: ~95px per second
-    const descentDuration = Math.max(900, (descentDist / 95) * 1000);
-    const descentStart = performance.now();
-
-    await new Promise((res) => {
-      const stepJet = (now) => {
-        if (!this.recallActive || this.isDragging) { res(); return; }
-        const elapsed = now - descentStart;
-        const t = Math.min(1, elapsed / descentDuration);
-
-        // Smooth glide with gentle hovering sine wave
-        const hoverWiggle = Math.sin(elapsed * 0.015) * 2;
-        const curY = Math.round(startY + (endY - startY) * t + hoverWiggle);
-        window.orphy.setBunnyPosition(x, curY);
-
-        if (t < 1) {
-          requestAnimationFrame(stepJet);
-        } else {
-          res();
-        }
-      };
-      requestAnimationFrame(stepJet);
-    });
-    if (!this.recallActive) return;
-
-    // 4. Touchdown & cut engines
+    // Step 4: Touchdown, Stow Jetpack & Celebrate!
+    this.tiltAngle = 0;
     this.jetpackActive = false;
     this.state = 'pocket_jetpack';
-    this.spawnDust(0);
-    await this.sleep(350);
+    this.spawnDustPuff();
+    await this.sleep(300);
+
+    // Final docked celebration
+    this.recallActive = false;
+    this.state = 'happy';
+    this.triggerHappy();
+    this.spawnHeartBurst();
+
+    if (window.orphy && window.orphy.bunnyDocked) {
+      window.orphy.bunnyDocked();
+    }
   }
 
   sleep(ms) {
@@ -738,61 +599,66 @@ class BunnyPet {
   }
 
   // ========================================================
-  // PARTICLES: Dust, Smoke, Flames, Hearts, Sparkles
+  // PARTICLES (Flames, Smoke Trail, Hearts, Dust)
   // ========================================================
-  spawnDust(offsetDx) {
-    for (let i = 0; i < 3; i++) {
-      this.particles.push({
-        type: 'dust',
-        x: this.x + 12 * this.pixelSize + offsetDx + (Math.random() * 8 - 4),
-        y: this.y + 26 * this.pixelSize - 2,
-        vx: (Math.random() - 0.5) * 0.8,
-        vy: -0.4 - Math.random() * 0.4,
-        alpha: 0.8,
-        lifetime: 400 + Math.random() * 200,
-        size: 3 + Math.floor(Math.random() * 2),
-        color: '#64748b'
-      });
+  spawnJetpackBurst() {
+    for (let i = 0; i < 8; i++) {
+      this.spawnJetpackFlames();
     }
   }
 
   spawnJetpackFlames() {
-    // Twin thruster exhaust
-    const leftNozzleX = this.x + 4 * this.pixelSize;
-    const rightNozzleX = this.x + 20 * this.pixelSize;
-    const nozzleY = this.y + 16 * this.pixelSize;
+    const leftNozzleX = this.x + 3 * this.pixelSize;
+    const rightNozzleX = this.x + 21 * this.pixelSize;
+    const nozzleY = this.y + 17 * this.pixelSize;
 
     [leftNozzleX, rightNozzleX].forEach(nx => {
-      // Flame particle
+      // Hot fire spark
       this.particles.push({
         type: 'flame',
         x: nx + (Math.random() * 4 - 2),
         y: nozzleY,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: 1.5 + Math.random() * 1.5,
+        vx: (Math.random() - 0.5) * 0.8,
+        vy: 1.8 + Math.random() * 2.0,
         alpha: 1,
-        lifetime: 300,
-        size: 4 + Math.floor(Math.random() * 3),
-        color: Math.random() > 0.5 ? '#ff4500' : '#ffea00'
+        lifetime: 280,
+        size: 3 + Math.floor(Math.random() * 3),
+        color: Math.random() > 0.4 ? '#ff3700' : '#ffea00'
       });
 
-      // Smoke puff
+      // Billowing smoke puff
       this.particles.push({
         type: 'smoke',
-        x: nx + (Math.random() * 4 - 2),
+        x: nx + (Math.random() * 6 - 3),
         y: nozzleY + 6,
-        vx: (Math.random() - 0.5) * 0.8,
-        vy: 0.6 + Math.random() * 0.8,
-        alpha: 0.6,
-        lifetime: 500,
-        size: 5 + Math.floor(Math.random() * 4),
-        color: '#94a3b8'
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: 0.8 + Math.random() * 1.2,
+        alpha: 0.7,
+        lifetime: 550,
+        size: 4 + Math.floor(Math.random() * 4),
+        color: '#64748b'
       });
     });
   }
 
+  spawnDustPuff() {
+    for (let i = 0; i < 6; i++) {
+      this.particles.push({
+        type: 'dust',
+        x: this.x + 12 * this.pixelSize + (Math.random() * 16 - 8),
+        y: this.y + 26 * this.pixelSize - 2,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: -0.6 - Math.random() * 0.6,
+        alpha: 0.8,
+        lifetime: 450,
+        size: 3 + Math.floor(Math.random() * 3),
+        color: '#94a3b8'
+      });
+    }
+  }
+
   spawnHeartBurst() {
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       this.particles.push({
         type: 'char',
         x: this.x + 12 * this.pixelSize + (Math.random() * 16 - 8),
@@ -804,23 +670,6 @@ class BunnyPet {
         phase: Math.random() * Math.PI * 2,
         size: 14 + Math.floor(Math.random() * 4),
         color: '#ff4a6e'
-      });
-    }
-  }
-
-  spawnSparkle() {
-    for (let i = 0; i < 4; i++) {
-      this.particles.push({
-        type: 'char',
-        x: this.x + 12 * this.pixelSize + (Math.random() * 20 - 10),
-        y: this.y + 10 + (Math.random() * 10),
-        vy: 0.8 + Math.random() * 0.8,
-        alpha: 1,
-        lifetime: 800,
-        char: '✦',
-        phase: Math.random() * Math.PI * 2,
-        size: 12,
-        color: '#fbbf24'
       });
     }
   }
@@ -854,7 +703,7 @@ class BunnyPet {
 
   update(dt) {
     this.frameTimer += dt;
-    const duration = this.state === 'climb_ladder' ? 150 : (this.state === 'dancing' ? 170 : 450);
+    const duration = this.state === 'jetpack' ? 120 : (this.state === 'dancing' ? 170 : 450);
     
     if (this.frameTimer >= duration) {
       this.frameTimer = 0;
@@ -872,7 +721,7 @@ class BunnyPet {
 
     this.bouncePhase += dt * 0.005;
 
-    // Music note particles when dancing
+    // Music note emission when dancing
     if (this.state === 'dancing') {
       this.particleTimer += dt;
       if (this.particleTimer >= 400 && this.particles.length < 8) {
@@ -881,22 +730,19 @@ class BunnyPet {
       }
     }
 
-    // Jetpack flame emission
+    // Jetpack flame continuous emissions
     if (this.jetpackActive) {
       this.jetpackTimer += dt;
-      if (this.jetpackTimer >= 60) {
+      if (this.jetpackTimer >= 50) {
         this.jetpackTimer = 0;
         this.spawnJetpackFlames();
       }
     }
 
-    // Update particles
+    // Update active particles
     this.particles = this.particles.filter(p => {
       p.alpha -= dt / p.lifetime;
-      if (p.type === 'flame' || p.type === 'smoke') {
-        p.y += p.vy * (dt / 16);
-        p.x += (p.vx || 0) * (dt / 16);
-      } else if (p.type === 'dust') {
+      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'dust') {
         p.y += p.vy * (dt / 16);
         p.x += (p.vx || 0) * (dt / 16);
       } else {
@@ -911,12 +757,6 @@ class BunnyPet {
   render() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // 1. Render Ladder (if ladder is deployed on screen edge)
-    if (this.ladderActive) {
-      this.renderLadder();
-    }
-
-    // 2. Render Bunny Sprite
     const frames = this.sprites[this.state] || this.sprites.idle;
     const sprite = frames[this.frame % frames.length];
 
@@ -932,8 +772,8 @@ class BunnyPet {
     }
     renderY += hopOffset;
 
-    // Shadow (only when on ground, not flying or climbing)
-    if (this.state !== 'dangling' && this.state !== 'climb_ladder' && !this.jetpackActive) {
+    // Shadow (only on ground, never while flying with jetpack or dangling)
+    if (this.state !== 'dangling' && !this.jetpackActive) {
       const shadowScale = 1 - Math.abs(hopOffset) / 35;
       this.ctx.save();
       this.ctx.globalAlpha = 0.28 * shadowScale;
@@ -946,8 +786,18 @@ class BunnyPet {
       this.ctx.restore();
     }
 
-    // Render Chibi Character with Facing Direction
+    // Render Chibi Character with Facing & Flight Tilt
     this.ctx.save();
+    
+    // Banking tilt when flying
+    if (this.tiltAngle !== 0) {
+      const cx = this.x + (24 * this.pixelSize) / 2;
+      const cy = this.y + (26 * this.pixelSize) / 2;
+      this.ctx.translate(cx, cy);
+      this.ctx.rotate(this.tiltAngle * this.facing);
+      this.ctx.translate(-cx, -cy);
+    }
+
     if (this.facing === -1) {
       this.ctx.translate(this.canvas.width, 0);
       this.ctx.scale(-1, 1);
@@ -955,7 +805,7 @@ class BunnyPet {
     this.renderSprite(sprite, this.x, renderY);
     this.ctx.restore();
 
-    // 3. Render Particles (flames, smoke, hearts, music notes)
+    // Render Particles (flames, smoke trail, hearts, notes)
     this.particles.forEach(p => {
       this.ctx.save();
       this.ctx.globalAlpha = Math.max(0, p.alpha);
@@ -972,26 +822,6 @@ class BunnyPet {
       }
       this.ctx.restore();
     });
-  }
-
-  // Draw authentic pixel ladder rungs along the side of the canvas
-  renderLadder() {
-    this.ctx.save();
-    const lx = (this.facing === 1) ? this.x + 24 * this.pixelSize + 2 : this.x - 14;
-    const topY = Math.max(10, this.y + 26 * this.pixelSize - this.ladderHeight);
-    const botY = this.y + 26 * this.pixelSize + 10;
-    
-    // Ladder Side Rails
-    this.ctx.fillStyle = '#78350f'; // Dark wood
-    this.ctx.fillRect(lx, topY, 3, botY - topY);
-    this.ctx.fillRect(lx + 12, topY, 3, botY - topY);
-
-    // Ladder Rungs every 8 pixels
-    this.ctx.fillStyle = '#b45309'; // Warm wood rung
-    for (let ry = botY; ry >= topY; ry -= 8) {
-      this.ctx.fillRect(lx + 2, ry, 10, 2);
-    }
-    this.ctx.restore();
   }
 
   renderSprite(spriteStr, x, y) {

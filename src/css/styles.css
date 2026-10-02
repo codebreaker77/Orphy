@@ -1,0 +1,352 @@
+/* Retro Pixel Art Theme — matching reference Image 1 */
+:root {
+  --theme-primary: #e64c65;
+  --theme-primary-glow: rgba(230, 76, 101, 0.35);
+  --theme-bg: #11141e;
+  --theme-bezel: #1b2130;
+  --theme-rim: #0a0d14;
+  --theme-text: #eef1f8;
+  --theme-text-muted: #73809e;
+  --theme-track: #262e42;
+  --theme-fill: #e6ebf5;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+html, body {
+  background: transparent !important;
+  overflow: hidden;
+  font-family: 'Press Start 2P', 'Silkscreen', monospace;
+  user-select: none;
+  width: 100%;
+  height: 100%;
+}
+
+#app {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  width: 100%;
+  height: 100%;
+}
+
+/* ========================================================
+   AUTHENTIC PIXEL CARD (Stepped Pixel Borders & Corners)
+   ======================================================== */
+.pixel-box {
+  position: relative;
+  background: var(--theme-bg);
+  min-width: 410px;
+  max-width: 440px;
+  padding: 18px 20px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  -webkit-app-region: drag;
+  
+  /* 8-bit stepped pixel corners */
+  clip-path: polygon(
+    0 10px, 4px 10px, 4px 6px, 6px 6px, 6px 4px, 10px 4px, 10px 0,
+    calc(100% - 10px) 0, calc(100% - 10px) 4px, calc(100% - 6px) 4px, calc(100% - 6px) 6px, calc(100% - 4px) 6px, calc(100% - 4px) 10px, 100% 10px,
+    100% calc(100% - 10px), calc(100% - 4px) calc(100% - 10px), calc(100% - 4px) calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) calc(100% - 4px), calc(100% - 10px) calc(100% - 4px), calc(100% - 10px) 100%,
+    10px 100%, 10px calc(100% - 4px), 6px calc(100% - 4px), 6px calc(100% - 6px), 4px calc(100% - 6px), 4px calc(100% - 10px), 0 calc(100% - 10px)
+  );
+
+  /* Layered pixel borders */
+  border: 4px solid var(--theme-bezel);
+  box-shadow:
+    0 0 0 4px var(--theme-rim),
+    0 8px 28px rgba(0, 0, 0, 0.75),
+    0 0 25px var(--theme-primary-glow);
+  transition: box-shadow 0.6s ease, border-color 0.6s ease;
+}
+
+.pixel-box:hover {
+  border-color: var(--theme-primary);
+}
+
+/* ========================================================
+   PIXEL ALBUM ART
+   ======================================================== */
+#album-art-container {
+  width: 76px;
+  height: 76px;
+  min-width: 76px;
+  background: #090c12;
+  border: 3px solid var(--theme-bezel);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  clip-path: polygon(
+    0 4px, 4px 4px, 4px 0,
+    calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px,
+    100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%,
+    4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px)
+  );
+}
+
+#album-canvas {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+}
+
+#no-art {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--theme-text-muted);
+  font-size: 26px;
+}
+
+#no-art.hidden {
+  display: none;
+}
+
+.pixel-note {
+  animation: noteHop 1.5s ease-in-out infinite;
+}
+
+@keyframes noteHop {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* ========================================================
+   INFO SECTION
+   ======================================================== */
+#info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+#text-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#song-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--theme-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+}
+
+#song-artist {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  color: var(--theme-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+/* Pixel Heart Button */
+.pixel-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+
+.pixel-icon-btn svg {
+  fill: var(--theme-text-muted);
+  transition: fill 0.2s, transform 0.15s;
+}
+
+.pixel-icon-btn:hover svg {
+  fill: var(--theme-primary);
+  transform: scale(1.15);
+}
+
+.pixel-icon-btn.liked svg {
+  fill: var(--theme-primary);
+}
+
+/* ========================================================
+   PROGRESS BAR
+   ======================================================== */
+#progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#progress-bar {
+  width: 100%;
+  height: 5px;
+  background: var(--theme-track);
+  position: relative;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+#progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--theme-fill);
+  position: relative;
+  transition: width 0.4s linear;
+}
+
+#progress-handle {
+  position: absolute;
+  right: -2px;
+  top: -3px;
+  width: 3px;
+  height: 11px;
+  background: #ffffff;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+}
+
+#time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  color: var(--theme-text-muted);
+}
+
+/* ========================================================
+   CONTROLS ROW (Matching Image 1)
+   ======================================================== */
+#controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+  margin-top: 2px;
+}
+
+.pixel-ctrl-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+  transition: transform 0.1s;
+}
+
+.pixel-ctrl-btn .pixel-path {
+  fill: var(--theme-text-muted);
+  transition: fill 0.15s;
+}
+
+.pixel-ctrl-btn:hover .pixel-path {
+  fill: var(--theme-text);
+}
+
+.pixel-ctrl-btn:hover {
+  transform: scale(1.12);
+}
+
+.pixel-ctrl-btn:active {
+  transform: scale(0.92);
+}
+
+/* Main Play/Pause Button (Pixel Disc from Image 1) */
+.pixel-main-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+  transition: transform 0.12s;
+}
+
+.pixel-disc {
+  width: 34px;
+  height: 34px;
+  background: var(--theme-fill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* 8-bit pixel circle */
+  clip-path: polygon(
+    10px 0, calc(100% - 10px) 0,
+    calc(100% - 10px) 3px, calc(100% - 6px) 3px,
+    calc(100% - 6px) 6px, calc(100% - 3px) 6px,
+    calc(100% - 3px) 10px, 100% 10px,
+    100% calc(100% - 10px),
+    calc(100% - 3px) calc(100% - 10px), calc(100% - 3px) calc(100% - 6px),
+    calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) calc(100% - 3px),
+    calc(100% - 10px) calc(100% - 3px), calc(100% - 10px) 100%,
+    10px 100%,
+    10px calc(100% - 3px), 6px calc(100% - 3px),
+    6px calc(100% - 6px), 3px calc(100% - 6px),
+    3px calc(100% - 10px), 0 calc(100% - 10px),
+    0 10px,
+    3px 10px, 3px 6px,
+    6px 6px, 6px 3px,
+    10px 3px, 10px 0
+  );
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.pixel-main-btn:hover .pixel-disc {
+  background: #ffffff;
+  transform: scale(1.08);
+}
+
+.pixel-main-btn:active .pixel-disc {
+  transform: scale(0.94);
+}
+
+/* ========================================================
+   DRAGGABLE PIXEL BUNNY CANVAS
+   ======================================================== */
+#bunny-canvas {
+  cursor: grab;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+}
+
+#bunny-canvas:active {
+  cursor: grabbing;
+}

@@ -1,0 +1,16 @@
+{
+  "name": "orphy",
+  "version": "1.0.0",
+  "main": "main.js",
+  "description": "Floating pixel art music widget with a dancing bunny",
+  "author": "",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "^33.0.0"
+  }
+}

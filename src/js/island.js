@@ -5,10 +5,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const noArt = document.getElementById('no-art');
   const songTitle = document.getElementById('song-title');
   const songArtist = document.getElementById('song-artist');
+  const vibeBadge = document.getElementById('vibe-badge');
   const timeCurrent = document.getElementById('time-current');
   const timeTotal = document.getElementById('time-total');
+  const progressBarWrap = document.getElementById('progress-bar-wrap');
   const progressBar = document.getElementById('progress-bar');
   const progressFill = document.getElementById('progress-fill');
+  const scrubTooltip = document.getElementById('scrub-tooltip');
   
   const btnPrev = document.getElementById('btn-prev');
   const btnToggle = document.getElementById('btn-toggle');
@@ -17,35 +20,33 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnShuffle = document.getElementById('btn-shuffle');
   const btnRepeat = document.getElementById('btn-repeat');
   const btnRecall = document.getElementById('btn-recall');
+  const btnCarrot = document.getElementById('btn-carrot');
 
   const iconPause = document.getElementById('icon-pause');
   const iconPlay = document.getElementById('icon-play');
   const eqBars = document.querySelectorAll('.eq-bar');
-  const eqPeaks = [
-    document.getElementById('peak-1'),
-    document.getElementById('peak-2'),
-    document.getElementById('peak-3'),
-    document.getElementById('peak-4'),
-    document.getElementById('peak-5')
-  ];
+  const eqPeaks = document.querySelectorAll('.eq-peak');
+  const numBands = eqBars.length || 16;
 
   const trackToast = document.getElementById('track-toast');
   const volumeToast = document.getElementById('volume-toast');
 
   let currentTitle = '';
   let currentDuration = 0;
+  let currentPosition = 0;
   let isMusicPlaying = false;
+  let currentGenre = 'standard';
   let hasRenderedThumbnail = false;
   let lastThumbnailUrl = null;
   let toastTimeout = null;
   let volToastTimeout = null;
   let simulatedVol = 100;
 
-  // Spectrum Analyzer State (Pure JS, ZERO DOM layout reads!)
-  const barHeights = [2, 2, 2, 2, 2];
-  const targetHeights = [2, 2, 2, 2, 2];
-  const peakPositions = [0, 0, 0, 0, 0];
-  const peakHoldTimers = [0, 0, 0, 0, 0];
+  // 16-Band Spectrum Analyzer State (Pure JS, zero layout reflows!)
+  const barHeights = new Float32Array(numBands).fill(2);
+  const targetHeights = new Float32Array(numBands).fill(2);
+  const peakPositions = new Float32Array(numBands).fill(0);
+  const peakHoldTimers = new Float32Array(numBands).fill(0);
   let spectrumPhase = 0;
   let lastPeakTime = performance.now();
 
@@ -73,21 +74,83 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Click to Seek
-  if (progressBar) {
-    progressBar.addEventListener('click', (e) => {
-      const rect = progressBar.getBoundingClientRect();
-      const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const targetSec = clickRatio * currentDuration;
+  // ========================================================
+  // INTERACTIVE PROGRESS DECK & SCRUBBING
+  // ========================================================
+  let isScrubbing = false;
+  let scrubRatio = 0;
 
-      progressFill.style.width = `${clickRatio * 100}%`;
-      timeCurrent.textContent = formatTime(targetSec);
+  function calculateRatio(e) {
+    if (!progressBar) return 0;
+    const rect = progressBar.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    const offsetX = e.clientX - rect.left;
+    return Math.max(0, Math.min(1, offsetX / rect.width));
+  }
 
-      if (window.orphy && window.orphy.mediaControl) {
-        window.orphy.mediaControl('seek', targetSec);
-      }
+  function updateScrubDisplay(ratio) {
+    if (currentDuration <= 0) return;
+    const targetSec = ratio * currentDuration;
+    progressFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+    timeCurrent.textContent = formatTime(targetSec);
+  }
+
+  function commitSeek(ratio) {
+    if (currentDuration <= 0) return;
+    const targetSec = Math.round(ratio * currentDuration);
+    currentPosition = targetSec;
+    timeCurrent.textContent = formatTime(targetSec);
+    progressFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+
+    if (window.orphy && window.orphy.mediaControl) {
+      window.orphy.mediaControl('seek', targetSec);
+    }
+  }
+
+  if (progressBarWrap) {
+    progressBarWrap.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return; // Primary left button only
+      if (currentDuration <= 0) return;
+      isScrubbing = true;
+      scrubRatio = calculateRatio(e);
+      updateScrubDisplay(scrubRatio);
     });
   }
+
+  window.addEventListener('mousemove', (e) => {
+    if (!progressBar) return;
+    const rect = progressBar.getBoundingClientRect();
+    const isOverBar = (
+      e.clientX >= rect.left && e.clientX <= rect.right &&
+      e.clientY >= rect.top - 8 && e.clientY <= rect.bottom + 10
+    );
+
+    // Update hover tooltip
+    if (scrubTooltip && (isOverBar || isScrubbing) && currentDuration > 0) {
+      const ratio = calculateRatio(e);
+      const hoverSec = ratio * currentDuration;
+      scrubTooltip.textContent = formatTime(hoverSec);
+      const tooltipX = Math.max(8, Math.min(rect.width - 8, e.clientX - rect.left));
+      scrubTooltip.style.left = `${tooltipX}px`;
+      scrubTooltip.classList.add('visible');
+    } else if (scrubTooltip && !isScrubbing) {
+      scrubTooltip.classList.remove('visible');
+    }
+
+    // Active drag scrub
+    if (isScrubbing) {
+      scrubRatio = calculateRatio(e);
+      updateScrubDisplay(scrubRatio);
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (isScrubbing) {
+      isScrubbing = false;
+      if (scrubTooltip) scrubTooltip.classList.remove('visible');
+      commitSeek(scrubRatio);
+    }
+  });
 
   // Mouse Wheel Volume Adjustment
   islandContainer.addEventListener('wheel', (e) => {
@@ -96,8 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
     simulatedVol = Math.max(0, Math.min(100, simulatedVol + delta));
     showVolumeToast(`VOL: ${simulatedVol}%`);
   }, { passive: false });
-
-  const btnCarrot = document.getElementById('btn-carrot');
 
   // Carrot button handler
   if (btnCarrot) {
@@ -133,6 +194,14 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnPrev) btnPrev.addEventListener('click', () => window.orphy?.mediaControl('prev'));
   if (btnToggle) btnToggle.addEventListener('click', () => window.orphy?.mediaControl('toggle'));
   if (btnNext) btnNext.addEventListener('click', () => window.orphy?.mediaControl('next'));
+  if (btnShuffle) btnShuffle.addEventListener('click', () => {
+    btnShuffle.classList.toggle('active');
+    showTrackToast(btnShuffle.classList.contains('active') ? 'SHUFFLE: ON' : 'SHUFFLE: OFF');
+  });
+  if (btnRepeat) btnRepeat.addEventListener('click', () => {
+    btnRepeat.classList.toggle('active');
+    showTrackToast(btnRepeat.classList.contains('active') ? 'REPEAT: ALL' : 'REPEAT: OFF');
+  });
 
   function showTrackToast(title) {
     if (!trackToast) return;
@@ -154,10 +223,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1200);
   }
 
+  function updateGenreDisplay(info) {
+    if (!window.GenreDetector || !vibeBadge) return;
+    currentGenre = window.GenreDetector.detect(info);
+    const genreLabels = {
+      rock: '⚡ ROCK',
+      chill: '☕ LO-FI',
+      groove: '🎧 GROOVE',
+      energetic: '✦ DANCE',
+      standard: '♪ STEREO'
+    };
+    vibeBadge.textContent = genreLabels[currentGenre] || '♪ STEREO';
+  }
+
   function handleMediaUpdate(info) {
     if (!info || !info.title) {
       songTitle.textContent = 'WAITING FOR MUSIC...';
       songArtist.textContent = 'PLAY SOMETHING!';
+      if (vibeBadge) vibeBadge.textContent = '♪ HI-FI';
       if (noArt) noArt.classList.remove('hidden');
       if (albumCtx) albumCtx.clearRect(0, 0, albumCanvas.width, albumCanvas.height);
       timeCurrent.textContent = '0:00';
@@ -167,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
       isMusicPlaying = false;
       currentTitle = '';
       currentDuration = 0;
+      currentPosition = 0;
       hasRenderedThumbnail = false;
       lastThumbnailUrl = null;
       return;
@@ -175,27 +259,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const songChanged = currentTitle !== info.title;
     currentTitle = info.title;
     currentDuration = info.duration || 0;
+    currentPosition = info.position || 0;
     isMusicPlaying = !!info.isPlaying;
 
     songTitle.textContent = (info.title || 'UNKNOWN').toUpperCase();
     songArtist.textContent = (info.artist || 'UNKNOWN ARTIST').toUpperCase();
 
+    updateGenreDisplay(info);
+
     if (songChanged) {
-      const vibe = window.GenreDetector ? window.GenreDetector.detect(info) : 'standard';
-      const vibeIcons = {
-        rock: '⚡ ROCK',
-        chill: '☕ CHILL',
-        groove: '🎧 GROOVE',
-        energetic: '★ RAVE',
-        standard: '♪ POP'
-      };
-      const label = vibeIcons[vibe] || '♪ MUSIC';
-      showTrackToast(`${info.title.slice(0, 18)} [${label}]`);
+      showTrackToast(info.title.toUpperCase());
     }
 
-    // Render Pixelated Album Cover ONLY when image changes!
+    // Album art thumbnail
     if (info.thumbnailDataUrl) {
-      if (songChanged || lastThumbnailUrl !== info.thumbnailDataUrl || !hasRenderedThumbnail) {
+      if (songChanged || !hasRenderedThumbnail || lastThumbnailUrl !== info.thumbnailDataUrl) {
         lastThumbnailUrl = info.thumbnailDataUrl;
         hasRenderedThumbnail = true;
         renderPixelAlbumArt(info.thumbnailDataUrl);
@@ -208,59 +286,90 @@ document.addEventListener('DOMContentLoaded', () => {
       lastThumbnailUrl = null;
     }
 
-    // Progress
-    const pos = info.position || 0;
-    const dur = info.duration || 0;
-    const progress = dur > 0 ? (pos / dur) * 100 : 0;
-    progressFill.style.width = `${Math.min(progress, 100)}%`;
-    timeCurrent.textContent = formatTime(pos);
-    timeTotal.textContent = formatTime(dur);
+    // Only update progress bar from media provider if user is NOT actively dragging
+    if (!isScrubbing) {
+      const pos = info.position || 0;
+      const dur = info.duration || 0;
+      const progress = dur > 0 ? (pos / dur) * 100 : 0;
+      progressFill.style.width = `${Math.min(progress, 100).toFixed(1)}%`;
+      timeCurrent.textContent = formatTime(pos);
+      timeTotal.textContent = formatTime(dur);
+    }
 
     setPlayPauseState(info.isPlaying);
   }
 
-  // Highly Optimized 60FPS Spectrum Analyzer (NO clientHeight forced reflows!)
+  // ========================================================
+  // 16-BAND SPECTRUM ANALYZER ENGINE (60FPS, Zero Layout Reads)
+  // ========================================================
   function updateSpectrumPeaks(time) {
     const dt = Math.min(0.05, (time - lastPeakTime) / 1000);
     lastPeakTime = time;
 
+    const maxH = 15; // Max height in pixels
+
     if (isMusicPlaying) {
-      spectrumPhase += dt * 8;
-      targetHeights[0] = 3 + Math.sin(spectrumPhase * 1.3) * 4 + Math.sin(spectrumPhase * 2.7) * 3;
-      targetHeights[1] = 4 + Math.cos(spectrumPhase * 1.8) * 5 + Math.sin(spectrumPhase * 3.1) * 3;
-      targetHeights[2] = 3 + Math.sin(spectrumPhase * 2.2) * 4 + Math.cos(spectrumPhase * 4.0) * 3;
-      targetHeights[3] = 4 + Math.cos(spectrumPhase * 2.9) * 4 + Math.sin(spectrumPhase * 5.2) * 3;
-      targetHeights[4] = 2 + Math.sin(spectrumPhase * 3.6) * 3 + Math.cos(spectrumPhase * 6.1) * 3;
+      // Speed up or slow down phase depending on music vibe
+      const phaseSpeed = (currentGenre === 'energetic') ? 14 : (currentGenre === 'rock' ? 12 : (currentGenre === 'chill' ? 5 : 8));
+      spectrumPhase += dt * phaseSpeed;
+
+      // Genre multipliers
+      const bassBoost = (currentGenre === 'rock' || currentGenre === 'groove') ? 1.4 : 1.0;
+      const midBoost = (currentGenre === 'groove' || currentGenre === 'energetic') ? 1.3 : 1.0;
+      const trebleBoost = (currentGenre === 'energetic' || currentGenre === 'rock') ? 1.3 : 0.8;
+
+      for (let i = 0; i < numBands; i++) {
+        const norm = i / (numBands - 1); // 0.0 (sub bass) to 1.0 (air treble)
+        
+        let target = 3;
+        if (norm < 0.25) {
+          // Low / Bass channels (0-3)
+          target = 4 + (Math.sin(spectrumPhase * 1.5 + i * 0.8) * 5 + Math.cos(spectrumPhase * 2.8) * 4) * bassBoost;
+        } else if (norm < 0.65) {
+          // Mid channels (4-10)
+          target = 3.5 + (Math.sin(spectrumPhase * 2.2 + i * 0.6) * 4.5 + Math.cos(spectrumPhase * 3.7 + i) * 3.5) * midBoost;
+        } else {
+          // Treble channels (11-15)
+          target = 2.5 + (Math.sin(spectrumPhase * 3.4 + i * 1.1) * 3.5 + Math.cos(spectrumPhase * 5.1) * 3.0) * trebleBoost;
+        }
+
+        // Add periodic rhythmic kick
+        const kickPulse = Math.pow(Math.max(0, Math.sin(spectrumPhase * 1.8)), 3) * (5 * (1 - norm * 0.5));
+        target += kickPulse;
+
+        targetHeights[i] = target;
+      }
     } else {
-      targetHeights[0] = 2;
-      targetHeights[1] = 2;
-      targetHeights[2] = 2;
-      targetHeights[3] = 2;
-      targetHeights[4] = 2;
+      // Resting idle state
+      for (let i = 0; i < numBands; i++) {
+        targetHeights[i] = 2;
+      }
     }
 
-    for (let i = 0; i < 5; i++) {
-      const clampedTarget = Math.max(2, Math.min(13, targetHeights[i]));
-      barHeights[i] += (clampedTarget - barHeights[i]) * 0.28;
+    // Smooth lerp & peak decay
+    for (let i = 0; i < numBands; i++) {
+      const clampedTarget = Math.max(2, Math.min(maxH, targetHeights[i]));
+      barHeights[i] += (clampedTarget - barHeights[i]) * 0.32;
 
       const curH = barHeights[i];
       const bar = eqBars[i];
       if (bar) bar.style.height = `${Math.round(curH)}px`;
 
+      // Floating Peak Hold Physics
       if (curH >= peakPositions[i]) {
         peakPositions[i] = curH;
-        peakHoldTimers[i] = 0.22;
+        peakHoldTimers[i] = 0.26; // Hold at apex for 260ms
       } else {
         if (peakHoldTimers[i] > 0) {
           peakHoldTimers[i] -= dt;
         } else {
-          peakPositions[i] = Math.max(0, peakPositions[i] - 16 * dt);
+          peakPositions[i] = Math.max(0, peakPositions[i] - 18 * dt); // Gravity fall
         }
       }
 
       const peakEl = eqPeaks[i];
       if (peakEl) {
-        const topPx = Math.max(0, 13 - Math.round(peakPositions[i]));
+        const topPx = Math.max(0, maxH - Math.round(peakPositions[i]));
         peakEl.style.top = `${topPx}px`;
       }
     }
@@ -269,6 +378,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   requestAnimationFrame(updateSpectrumPeaks);
 
+  // ========================================================
+  // PIXEL ALBUM ART QUANTIZATION & COLOR EXTRACTION
+  // ========================================================
   function renderPixelAlbumArt(dataUrl) {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -331,7 +443,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function setThemeColor(r, g, b) {
     const root = document.documentElement;
     root.style.setProperty('--theme-primary', `rgb(${r}, ${g}, ${b})`);
-    root.style.setProperty('--theme-primary-glow', `rgba(${r}, ${g}, ${b}, 0.4)`);
+    root.style.setProperty('--theme-primary-glow', `rgba(${r}, ${g}, ${b}, 0.45)`);
   }
 
   // Subscribe to media events

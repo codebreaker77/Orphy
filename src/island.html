@@ -15,27 +15,33 @@
     <div id="volume-toast" class="pixel-toast">VOL: 100%</div>
     <div id="lock-badge" class="pixel-badge" title="Position Locked">🔒</div>
 
-    <!-- Pixel Album Cover -->
-    <div id="album-art-container">
-      <canvas id="album-canvas" width="68" height="68"></canvas>
-      <div id="no-art">
-        <span class="pixel-note">♪</span>
+    <!-- Left: Retro Deck & Pixel Album Cover -->
+    <div id="album-deck">
+      <div id="album-art-container">
+        <canvas id="album-canvas" width="68" height="68"></canvas>
+        <div id="no-art">
+          <span class="pixel-note">♪</span>
+        </div>
       </div>
+      <div class="deck-tag">TAPE-01</div>
     </div>
 
-    <!-- Info & Controls -->
+    <!-- Right: Info, Spectrum & Controls Deck -->
     <div id="info">
+      <!-- Row 1: Track Metadata & Header Micro-Actions -->
       <div id="header-row">
         <div id="text-meta">
           <div id="song-title">WAITING FOR MUSIC...</div>
-          <div id="song-artist">PLAY SOMETHING!</div>
+          <div id="meta-subline">
+            <span id="song-artist">PLAY SOMETHING!</span>
+            <span id="vibe-badge" class="pixel-chip">♪ HI-FI</span>
+          </div>
         </div>
         
-        <!-- Header Actions: Recall Bunny, Feed Carrot & Heart -->
+        <!-- Header Actions: Feed Carrot, Recall Bunny & Heart -->
         <div id="header-actions">
           <button id="btn-carrot" class="pixel-action-btn" title="Feed Carrot 🥕">
-            <svg viewBox="0 0 16 16" width="16" height="16">
-              <!-- Pixel Carrot Icon -->
+            <svg viewBox="0 0 16 16" width="15" height="15">
               <path fill="#22c55e" d="M10,1 h4 v2 h-4 z M12,3 h2 v2 h-2 z M8,3 h2 v2 h-2 z"/>
               <path fill="#ea580c" d="M6,5 h4 v2 h-4 z M5,7 h5 v2 h-5 z M4,9 h4 v2 h-4 z M3,11 h3 v2 h-3 z M2,13 h2 v2 h-2 z"/>
               <path fill="#fb923c" d="M7,5 h2 v2 h-2 z M6,7 h2 v1 h-2 z M5,9 h2 v1 h-2 z"/>
@@ -43,71 +49,81 @@
           </button>
 
           <button id="btn-recall" class="pixel-action-btn" title="Call Bunny Back (Curvy Jetpack Flight)">
-            <svg viewBox="0 0 16 16" width="16" height="16">
-              <!-- Pixel Bunny Head Icon -->
+            <svg viewBox="0 0 16 16" width="15" height="15">
               <path class="pixel-path" d="M3,1 h2 v4 h-2 z M11,1 h2 v4 h-2 z M4,4 h8 v2 h-8 z M2,6 h12 v6 h-12 z M4,8 h2 v2 h-2 z M10,8 h2 v2 h-2 z M7,10 h2 v2 h-2 z"/>
             </svg>
           </button>
           
           <button id="btn-heart" class="pixel-action-btn" title="Favorite">
-            <svg viewBox="0 0 16 16" width="16" height="16">
-              <!-- Pixel Heart Icon -->
+            <svg viewBox="0 0 16 16" width="15" height="15">
               <path class="pixel-path" d="M2,3 h4 v2 h-4 z M10,3 h4 v2 h-4 z M0,5 h16 v2 h-16 z M0,7 h16 v2 h-16 z M2,9 h12 v2 h-12 z M4,11 h8 v2 h-8 z M6,13 h4 v2 h-4 z M7,14 h2 v1 h-2 z"/>
             </svg>
           </button>
         </div>
       </div>
 
-      <!-- Progress Section (Click to Seek) -->
+      <!-- Row 2: Extended 16-Band Hi-Fi Spectrum Analyzer -->
+      <div id="spectrum-deck" title="16-Band Hi-Fi Graphic Spectrum">
+        <div class="spectrum-bar-container" id="pixel-equalizer">
+          <!-- 16 Channels with Segmented LED Bars & Floating Peaks -->
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+          <div class="eq-col"><div class="eq-peak"></div><div class="eq-bar"></div></div>
+        </div>
+      </div>
+
+      <!-- Row 3: Interactive Progress Deck (Drag & Click Seeking) -->
       <div id="progress-section">
-        <div id="progress-bar" title="Click to Seek">
-          <div id="progress-fill">
-            <div id="progress-handle"></div>
+        <div id="progress-bar-wrap">
+          <div id="progress-bar" title="Drag or Click to Seek Position">
+            <div id="progress-fill">
+              <div id="progress-handle"></div>
+            </div>
+            <!-- Interactive Time Tooltip -->
+            <div id="scrub-tooltip" class="pixel-tooltip">0:00</div>
           </div>
         </div>
         <div id="time-row">
           <span id="time-current">0:00</span>
+          <span id="format-tag">ORPHY HI-FI</span>
           <span id="time-total">0:00</span>
         </div>
       </div>
 
-      <!-- Bottom Controls Row -->
+      <!-- Row 4: Indie Transport Controls -->
       <div id="controls">
-        <!-- 5-Band Pixel Spectrum Analyzer with Peak Hold -->
-        <div id="pixel-equalizer" title="Pixel Spectrum">
-          <div class="eq-col">
-            <div class="eq-peak" id="peak-1"></div>
-            <div class="eq-bar bar-1"></div>
-          </div>
-          <div class="eq-col">
-            <div class="eq-peak" id="peak-2"></div>
-            <div class="eq-bar bar-2"></div>
-          </div>
-          <div class="eq-col">
-            <div class="eq-peak" id="peak-3"></div>
-            <div class="eq-bar bar-3"></div>
-          </div>
-          <div class="eq-col">
-            <div class="eq-peak" id="peak-4"></div>
-            <div class="eq-bar bar-4"></div>
-          </div>
-          <div class="eq-col">
-            <div class="eq-peak" id="peak-5"></div>
-            <div class="eq-bar bar-5"></div>
-          </div>
-        </div>
-
-        <div id="ctrl-group">
+        <div class="ctrl-subgroup">
           <!-- Shuffle -->
           <button id="btn-shuffle" class="pixel-ctrl-btn" title="Shuffle">
-            <svg viewBox="0 0 14 14" width="13" height="13">
+            <svg viewBox="0 0 14 14" width="11" height="11">
               <path class="pixel-path" d="M1,2 h3 v2 h-3 z M4,4 h2 v2 h-2 z M6,6 h2 v2 h-2 z M8,8 h3 v-2 h2 v5 h-5 v-2 h3 z M1,11 h3 v-2 h-3 z M4,9 h2 v-2 h-2 z M8,5 h3 v2 h2 v-5 h-5 v2 h3 z"/>
             </svg>
           </button>
+          <!-- Repeat -->
+          <button id="btn-repeat" class="pixel-ctrl-btn" title="Repeat">
+            <svg viewBox="0 0 14 14" width="11" height="11">
+              <path class="pixel-path" d="M1,3 h10 v2 h-10 z M11,3 h2 v6 h-2 z M9,7 v2 h3 v-2 z M13,8 v3 h-2 v-1 h-8 v-2 h8 z M1,6 h2 v4 h-2 z M3,5 v2 h-2 v-2 z M0,4 v3 h2 v-1 h8 v-2 h-8 z"/>
+            </svg>
+          </button>
+        </div>
 
+        <div id="ctrl-group">
           <!-- Prev -->
           <button id="btn-prev" class="pixel-ctrl-btn" title="Previous">
-            <svg viewBox="0 0 16 16" width="14" height="14">
+            <svg viewBox="0 0 16 16" width="13" height="13">
               <path class="pixel-path" d="M1,2 h2 v12 h-2 z M4,8 h2 v2 h-2 z M4,6 h2 v2 h-2 z M6,5 h2 v6 h-2 z M8,3 h2 v10 h-2 z M10,8 h2 v2 h-2 z M10,6 h2 v2 h-2 z M12,5 h2 v6 h-2 z M14,3 h2 v10 h-2 z"/>
             </svg>
           </button>
@@ -115,10 +131,10 @@
           <!-- Main Play/Pause Disc -->
           <button id="btn-toggle" class="pixel-main-btn" title="Play/Pause">
             <div class="pixel-disc">
-              <svg id="icon-pause" viewBox="0 0 16 16" width="13" height="13">
+              <svg id="icon-pause" viewBox="0 0 16 16" width="12" height="12">
                 <path d="M3,3 h3 v10 h-3 z M10,3 h3 v10 h-3 z" fill="#11141e"/>
               </svg>
-              <svg id="icon-play" viewBox="0 0 16 16" width="13" height="13" style="display:none; margin-left:2px;">
+              <svg id="icon-play" viewBox="0 0 16 16" width="12" height="12" style="display:none; margin-left:2px;">
                 <path d="M4,2 h3 v2 h-3 z M4,4 h5 v2 h-5 z M4,6 h7 v2 h-7 z M4,8 h9 v2 h-9 z M4,10 h7 v2 h-7 z M4,12 h5 v2 h-5 z M4,14 h3 v-2 h-3 z" fill="#11141e"/>
               </svg>
             </div>
@@ -126,15 +142,8 @@
 
           <!-- Next -->
           <button id="btn-next" class="pixel-ctrl-btn" title="Next">
-            <svg viewBox="0 0 16 16" width="14" height="14">
+            <svg viewBox="0 0 16 16" width="13" height="13">
               <path class="pixel-path" d="M13,2 h2 v12 h-2 z M10,8 h2 v2 h-2 z M10,6 h2 v2 h-2 z M8,5 h2 v6 h-2 z M6,3 h2 v10 h-2 z M4,8 h2 v2 h-2 z M4,6 h2 v2 h-2 z M2,5 h2 v6 h-2 z M0,3 h2 v10 h-2 z"/>
-            </svg>
-          </button>
-
-          <!-- Repeat -->
-          <button id="btn-repeat" class="pixel-ctrl-btn" title="Repeat">
-            <svg viewBox="0 0 14 14" width="13" height="13">
-              <path class="pixel-path" d="M1,3 h10 v2 h-10 z M11,3 h2 v6 h-2 z M9,7 v2 h3 v-2 z M13,8 v3 h-2 v-1 h-8 v-2 h8 z M1,6 h2 v4 h-2 z M3,5 v2 h-2 v-2 z M0,4 v3 h2 v-1 h8 v-2 h-8 z"/>
             </svg>
           </button>
         </div>

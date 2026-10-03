@@ -174,13 +174,16 @@ class WindowsProvider {
   }
 
   async control(action, arg) {
-    let method = '';
-    if (action === 'toggle') method = 'TryTogglePlayPauseAsync()';
-    else if (action === 'next') method = 'TrySkipNextAsync()';
-    else if (action === 'prev') method = 'TrySkipPreviousAsync()';
-    else if (action === 'seek' && typeof arg === 'number') {
-      const secs = Math.max(0, Math.round(arg));
-      method = `TryChangePlaybackPositionAsync([System.TimeSpan]::FromSeconds(${secs}))`;
+    let scriptBlock = '';
+    if (action === 'toggle') {
+      scriptBlock = 'Await ($session.TryTogglePlayPauseAsync()) ([bool]) | Out-Null';
+    } else if (action === 'next') {
+      scriptBlock = 'Await ($session.TrySkipNextAsync()) ([bool]) | Out-Null';
+    } else if (action === 'prev') {
+      scriptBlock = 'Await ($session.TrySkipPreviousAsync()) ([bool]) | Out-Null';
+    } else if (action === 'seek' && typeof arg === 'number') {
+      const ticks = Math.max(0, Math.round(arg * 10000000));
+      scriptBlock = `Await ($session.TryChangePlaybackPositionAsync([Int64]${ticks})) ([bool]) | Out-Null`;
     } else {
       return false;
     }
@@ -191,18 +194,20 @@ class WindowsProvider {
       'Function Await($WinRtTask, $ResultType) {',
       '    $asTask = $asTaskGeneric.MakeGenericMethod($ResultType)',
       '    $netTask = $asTask.Invoke($null, @($WinRtTask))',
-      '    $netTask.Wait(-1) | Out-Null',
+      '    $netTask.Wait(1500) | Out-Null',
       '    return $netTask.Result',
       '}',
       '[Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime] | Out-Null',
       '$mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])',
       '$session = $mgr.GetCurrentSession()',
       'if ($null -ne $session) {',
-      '    $session.' + method,
+      `    ${scriptBlock}`,
       '}'
     ].join('\n');
 
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true }, () => {});
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true }, (err) => {
+      if (err) console.warn('[Orphy] Control error:', err.message);
+    });
     return true;
   }
 

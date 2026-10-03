@@ -17,8 +17,8 @@ let tray = null;
 let mediaProvider = null;
 let heartbeatInterval = null;
 
-const ISLAND_WIDTH = 432;
-const ISLAND_HEIGHT = 135;
+const ISLAND_WIDTH = 452;
+const ISLAND_HEIGHT = 150;
 const BUNNY_WIDTH = 140;
 const BUNNY_HEIGHT = 160;
 
@@ -369,6 +369,10 @@ ipcMain.handle('get-media-info', async () => {
 ipcMain.handle('media-control', async (_event, action, arg) => {
   try {
     await mediaProvider.control(action, arg);
+    if (action === 'seek' && typeof arg === 'number' && mediaProvider.latestMedia) {
+      mediaProvider.latestMedia.position = arg;
+      broadcastMedia(mediaProvider.latestMedia);
+    }
     const info = await mediaProvider.getMediaInfo();
     broadcastMedia(info);
     return true;

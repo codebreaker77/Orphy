@@ -1,11 +1,15 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, globalShortcut } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const MediaProvider = require('./media/provider');
 
 // Avoid cache locking & GPU sandbox issues on Windows
-app.setPath('userData', path.join(app.getPath('temp'), 'orphy-cache'));
+const userDataDir = path.join(app.getPath('temp'), 'orphy-cache');
+app.setPath('userData', userDataDir);
 app.commandLine.appendSwitch('disable-gpu-sandbox');
 app.commandLine.appendSwitch('no-sandbox');
+
+const CONFIG_PATH = path.join(userDataDir, 'config.json');
 
 let islandWindow = null;
 let bunnyWindow = null;
@@ -13,21 +17,91 @@ let tray = null;
 let mediaProvider = null;
 let pollInterval = null;
 let isPolling = false;
-let isDocked = true;
 
 const ISLAND_WIDTH = 432;
 const ISLAND_HEIGHT = 135;
 const BUNNY_WIDTH = 140;
 const BUNNY_HEIGHT = 160;
 
+// App configuration & state
+let config = {
+  islandX: null,
+  islandY: null,
+  bunnyX: null,
+  bunnyY: null,
+  isDocked: true,
+  isLocked: false,
+  alwaysOnTop: true
+};
+
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      const data = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+      config = { ...config, ...data };
+    }
+  } catch (err) {
+    console.warn('[Orphy] Could not load config, using defaults:', err.message);
+  }
+}
+
+let saveTimer = null;
+function saveConfig() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      if (islandWindow && !islandWindow.isDestroyed()) {
+        const [ix, iy] = islandWindow.getPosition();
+        config.islandX = ix;
+        config.islandY = iy;
+      }
+      if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+        const [bx, by] = bunnyWindow.getPosition();
+        config.bunnyX = bx;
+        config.bunnyY = by;
+      }
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+    } catch (err) {
+      console.warn('[Orphy] Could not save config:', err.message);
+    }
+  }, 400);
+}
+
+function clampToBounds(x, y, w, h) {
+  const display = screen.getDisplayNearestPoint({ x, y }) || screen.getPrimaryDisplay();
+  const workArea = display.workArea;
+  const clampedX = Math.max(workArea.x, Math.min(workArea.x + workArea.width - w, x));
+  const clampedY = Math.max(workArea.y, Math.min(workArea.y + workArea.height - h, y));
+  return { x: Math.round(clampedX), y: Math.round(clampedY), workArea };
+}
+
 function createWindows() {
+  loadConfig();
+
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenW, height: screenH } = primaryDisplay.workAreaSize;
 
-  // Calculate starting positions (Island centered near top, Bunny docked to its right)
-  const totalW = ISLAND_WIDTH + BUNNY_WIDTH + 8;
-  const startX = Math.max(20, Math.round((screenW - totalW) / 2));
-  const startY = 50;
+  const defaultTotalW = ISLAND_WIDTH + BUNNY_WIDTH + 8;
+  const defaultStartX = Math.max(20, Math.round((screenW - defaultTotalW) / 2));
+  const defaultStartY = 50;
+
+  // Determine starting Island coordinates
+  let startX = config.islandX != null ? config.islandX : defaultStartX;
+  let startY = config.islandY != null ? config.islandY : defaultStartY;
+  const clampedIsland = clampToBounds(startX, startY, ISLAND_WIDTH, ISLAND_HEIGHT);
+  startX = clampedIsland.x;
+  startY = clampedIsland.y;
+
+  // Determine starting Bunny coordinates
+  let bX = config.bunnyX != null ? config.bunnyX : startX + ISLAND_WIDTH + 4;
+  let bY = config.bunnyY != null ? config.bunnyY : startY - 10;
+  if (config.isDocked) {
+    bX = startX + ISLAND_WIDTH + 4;
+    bY = startY - 10;
+  }
+  const clampedBunny = clampToBounds(bX, bY, BUNNY_WIDTH, BUNNY_HEIGHT);
+  bX = clampedBunny.x;
+  bY = clampedBunny.y;
 
   // 1. Create Island Window (Music Card)
   islandWindow = new BrowserWindow({
@@ -38,7 +112,7 @@ function createWindows() {
     y: startY,
     transparent: true,
     frame: false,
-    alwaysOnTop: true,
+    alwaysOnTop: config.alwaysOnTop,
     skipTaskbar: false,
     resizable: false,
     hasShadow: false,
@@ -57,11 +131,11 @@ function createWindows() {
     title: 'Orphy Bunny',
     width: BUNNY_WIDTH,
     height: BUNNY_HEIGHT,
-    x: startX + ISLAND_WIDTH + 4,
-    y: startY - 10,
+    x: bX,
+    y: bY,
     transparent: true,
     frame: false,
-    alwaysOnTop: true,
+    alwaysOnTop: config.alwaysOnTop,
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
@@ -75,16 +149,39 @@ function createWindows() {
 
   bunnyWindow.loadFile(path.join(__dirname, 'src', 'bunny.html'));
 
-  // Keep both windows on top
-  islandWindow.setAlwaysOnTop(true);
-  bunnyWindow.setAlwaysOnTop(true);
+  islandWindow.setAlwaysOnTop(config.alwaysOnTop, 'floating');
+  bunnyWindow.setAlwaysOnTop(config.alwaysOnTop, 'floating');
 
-  // When user moves the Island, docked bunny follows smoothly!
+  // Velocity tracking for docked drag-lag physics
+  let lastMoveTime = performance.now();
+  let lastX = startX;
+  let lastY = startY;
+  let stopDragTimer = null;
+
   islandWindow.on('move', () => {
-    if (isDocked && islandWindow && bunnyWindow && !bunnyWindow.isDestroyed()) {
-      const [ix, iy] = islandWindow.getPosition();
+    const now = performance.now();
+    const dt = Math.max(1, now - lastMoveTime);
+    const [ix, iy] = islandWindow.getPosition();
+
+    const vx = ((ix - lastX) / dt) * 16;
+    const vy = ((iy - lastY) / dt) * 16;
+    lastMoveTime = now;
+    lastX = ix;
+    lastY = iy;
+
+    if (config.isDocked && bunnyWindow && !bunnyWindow.isDestroyed()) {
       bunnyWindow.setPosition(ix + ISLAND_WIDTH + 4, iy - 10);
+      bunnyWindow.webContents.send('island-drag-lag', { vx, vy });
+
+      if (stopDragTimer) clearTimeout(stopDragTimer);
+      stopDragTimer = setTimeout(() => {
+        if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+          bunnyWindow.webContents.send('island-drag-lag', { vx: 0, vy: 0 });
+        }
+      }, 100);
     }
+
+    saveConfig();
   });
 
   islandWindow.on('closed', () => {
@@ -96,7 +193,7 @@ function createWindows() {
     bunnyWindow = null;
   });
 
-  console.log(`[Orphy] Windows initialized: Island at (${startX}, ${startY}), Bunny docked`);
+  console.log(`[Orphy] Windows initialized: Island at (${startX}, ${startY}), Bunny at (${bX}, ${bY})`);
 }
 
 function createTray() {
@@ -105,7 +202,22 @@ function createTray() {
     tray = new Tray(icon);
 
     const contextMenu = Menu.buildFromTemplate([
-      { label: 'Recall Bunny', click: triggerRecall },
+      { label: 'Feed Carrot 🥕', click: feedCarrotToBunny },
+      { label: 'Recall Bunny (Jetpack)', click: triggerRecall },
+      { label: 'Summon to Cursor (Ctrl+Shift+B)', click: summonBunnyToCursor },
+      { type: 'separator' },
+      {
+        label: 'Lock Position',
+        type: 'checkbox',
+        checked: config.isLocked,
+        click: (menuItem) => toggleLock(menuItem.checked)
+      },
+      {
+        label: 'Always on Top',
+        type: 'checkbox',
+        checked: config.alwaysOnTop,
+        click: (menuItem) => toggleAlwaysOnTop(menuItem.checked)
+      },
       { type: 'separator' },
       { label: 'Show All', click: () => {
         if (islandWindow) islandWindow.show();
@@ -143,10 +255,66 @@ function triggerRecall() {
   const recallData = {
     targetX: ix + ISLAND_WIDTH + 4,
     targetY: iy - 10,
-    screenBounds: primaryDisplay.workArea
+    screenBounds: primaryDisplay.workArea,
+    dockOnArrival: true
   };
 
+  config.isDocked = true;
+  saveConfig();
   bunnyWindow.webContents.send('start-recall', recallData);
+}
+
+function summonBunnyToCursor() {
+  if (!bunnyWindow || bunnyWindow.isDestroyed()) return;
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  
+  let targetX = cursor.x - Math.round(BUNNY_WIDTH / 2);
+  let targetY = cursor.y - Math.round(BUNNY_HEIGHT / 2);
+
+  const clamped = clampToBounds(targetX, targetY, BUNNY_WIDTH, BUNNY_HEIGHT);
+  targetX = clamped.x;
+  targetY = clamped.y;
+
+  config.isDocked = false;
+  saveConfig();
+
+  const flightData = {
+    targetX,
+    targetY,
+    screenBounds: display.workArea,
+    dockOnArrival: false
+  };
+
+  bunnyWindow.webContents.send('start-recall', flightData);
+}
+
+function feedCarrotToBunny() {
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.webContents.send('feed-carrot');
+  }
+}
+
+function toggleLock(locked) {
+  config.isLocked = locked;
+  saveConfig();
+  if (islandWindow && !islandWindow.isDestroyed()) {
+    islandWindow.webContents.send('lock-changed', locked);
+  }
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.webContents.send('lock-changed', locked);
+  }
+}
+
+function toggleAlwaysOnTop(val) {
+  config.alwaysOnTop = val;
+  saveConfig();
+  if (islandWindow && !islandWindow.isDestroyed()) {
+    islandWindow.setAlwaysOnTop(val, 'floating');
+  }
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.setAlwaysOnTop(val, 'floating');
+  }
 }
 
 function startPolling() {
@@ -172,7 +340,7 @@ function startPolling() {
   };
 
   poll();
-  pollInterval = setInterval(poll, 2000);
+  pollInterval = setInterval(poll, 1800);
 }
 
 // ==========================================
@@ -186,9 +354,9 @@ ipcMain.handle('get-media-info', async () => {
   }
 });
 
-ipcMain.handle('media-control', async (event, action) => {
+ipcMain.handle('media-control', async (_event, action, arg) => {
   try {
-    await mediaProvider.control(action);
+    await mediaProvider.control(action, arg);
     const info = await mediaProvider.getMediaInfo();
     if (islandWindow && !islandWindow.isDestroyed()) {
       islandWindow.webContents.send('media-update', info);
@@ -208,11 +376,13 @@ ipcMain.handle('recall-bunny', () => {
   return true;
 });
 
-// Move Bunny Window on screen
+// Move Bunny Window on screen (with screen clamping)
 ipcMain.handle('set-bunny-position', (_event, { x, y }) => {
   if (bunnyWindow && !bunnyWindow.isDestroyed()) {
-    isDocked = false; // Detached when moved manually
-    bunnyWindow.setPosition(Math.round(x), Math.round(y));
+    config.isDocked = false; // Detached when moved manually
+    const clamped = clampToBounds(x, y, BUNNY_WIDTH, BUNNY_HEIGHT);
+    bunnyWindow.setPosition(clamped.x, clamped.y);
+    saveConfig();
   }
   return true;
 });
@@ -238,8 +408,70 @@ ipcMain.handle('get-screen-bounds', () => {
 });
 
 ipcMain.handle('bunny-docked', () => {
-  isDocked = true;
+  config.isDocked = true;
+  saveConfig();
   return true;
+});
+
+ipcMain.handle('feed-carrot', () => {
+  feedCarrotToBunny();
+  return true;
+});
+
+ipcMain.handle('get-lock-state', () => {
+  return config.isLocked;
+});
+
+// Context Menus
+ipcMain.handle('open-island-context-menu', () => {
+  if (!islandWindow || islandWindow.isDestroyed()) return;
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Lock Position',
+      type: 'checkbox',
+      checked: config.isLocked,
+      click: (item) => toggleLock(item.checked)
+    },
+    {
+      label: 'Always on Top',
+      type: 'checkbox',
+      checked: config.alwaysOnTop,
+      click: (item) => toggleAlwaysOnTop(item.checked)
+    },
+    { type: 'separator' },
+    { label: 'Feed Carrot 🥕', click: feedCarrotToBunny },
+    { label: 'Call Bunny (Return)', click: triggerRecall },
+    { label: 'Summon to Cursor (Ctrl+Shift+B)', click: summonBunnyToCursor },
+    { type: 'separator' },
+    {
+      label: 'Hide Orphy',
+      click: () => {
+        if (islandWindow) islandWindow.hide();
+        if (bunnyWindow) bunnyWindow.hide();
+      }
+    },
+    { label: 'Quit Orphy', click: () => app.quit() }
+  ]);
+  menu.popup({ window: islandWindow });
+});
+
+ipcMain.handle('open-bunny-context-menu', () => {
+  if (!bunnyWindow || bunnyWindow.isDestroyed()) return;
+  const menu = Menu.buildFromTemplate([
+    { label: 'Feed Carrot 🥕', click: feedCarrotToBunny },
+    { label: 'Return to Island (Jetpack)', click: triggerRecall },
+    { label: 'Summon to Cursor (Ctrl+Shift+B)', click: summonBunnyToCursor },
+    { type: 'separator' },
+    {
+      label: 'Always on Top',
+      type: 'checkbox',
+      checked: config.alwaysOnTop,
+      click: (item) => toggleAlwaysOnTop(item.checked)
+    },
+    { type: 'separator' },
+    { label: 'Quit Orphy', click: () => app.quit() }
+  ]);
+  menu.popup({ window: bunnyWindow });
 });
 
 ipcMain.handle('quit-app', () => {
@@ -253,9 +485,22 @@ app.whenReady().then(() => {
   createTray();
   startPolling();
 
+  // Register Global Shortcut: Ctrl+Shift+B summons bunny to cursor
+  try {
+    globalShortcut.register('CommandOrControl+Shift+B', () => {
+      summonBunnyToCursor();
+    });
+  } catch (err) {
+    console.warn('[Orphy] Failed to register global shortcut:', err.message);
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindows();
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {

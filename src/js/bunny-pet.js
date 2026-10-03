@@ -8,29 +8,45 @@ class BunnyPet {
     this.x = 35;
     this.y = 40;
     
-    // States: 'idle', 'dancing', 'happy', 'sleeping', 'dangling', 'jetpack', 'pocket_jetpack'
+    // States: 'idle', 'dancing', 'lounging', 'sleeping', 'wake_up', 'munching', 'happy', 'dangling', 'pocket_jetpack', 'jetpack'
     this.state = 'idle';
     this.frame = 0;
     this.frameTimer = 0;
     this.facing = 1; // 1 = right, -1 = left
     this.tiltAngle = 0; // Flight banking angle
+    this.dockedLagAngle = 0;
+    this.targetLagAngle = 0;
     
     this.themeColor = '#e64c65';
     this.particles = [];
     this.isDragging = false;
+    this.isLocked = false;
     
     // Jetpack Flight Properties
     this.jetpackActive = false;
     this.jetpackTimer = 0;
     this.recallActive = false;
-    this.flightCurve = null;
     this.screenBounds = { x: 0, y: 0, width: 1920, height: 1080 };
     
-    // Lifelike timers
+    // Music Lifecycle & Timers
+    this.isMediaPlaying = false;
+    this.pausedDuration = 0;
     this.bouncePhase = 0;
     this.particleTimer = 0;
     this.happyTimer = 0;
+    this.wakeUpTimer = 0;
+    this.munchTimer = 0;
+    this.sleepParticleTimer = 0;
     this.lastTime = performance.now();
+    
+    // Interactive Snack Feeding (Carrot)
+    this.fallingCarrot = null;
+
+    // Reactive Eye Tracking
+    this.mouseCanvasX = null;
+    this.mouseCanvasY = null;
+    this.eyeOffsetX = 0;
+    this.eyeOffsetY = 0;
     
     this.initSprites();
     this.setupMouseEvents();
@@ -44,6 +60,8 @@ class BunnyPet {
     // . = trans, 1 = outline (#0e111a), 2 = skin (#fbf3ea), 3 = ear pink (#ff7997), 4 = eye (#0f121d)
     // 5 = blush (#ff96af), 6 = hoodie (#1e2434), 7 = accent, 8 = mouth (#e04268), 9 = white, H = earcup (#2b3449)
     // J = jetpack steel (#64748b), K = jetpack nozzle (#334155), V = visor blue (#38bdf8), F = flame (#ffea00)
+    // G = Gameboy gray (#94a3b8), P = Gameboy screen (#84cc16), R = red button (#ef4444)
+    // C = carrot orange (#ea580c), L = carrot leaf (#16a34a), E = exclamation (#ffea00)
 
     // IDLE Frame 0
     const IDLE_0 = [
@@ -222,6 +240,213 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
+    // LOUNGING (Holding mini Game Boy)
+    const LOUNGING_0 = [
+      "........................",
+      ".......11........11.....",
+      "......1231......1321....",
+      "......1231......1321....",
+      ".....11231.....11231....",
+      "....1HH1211111121HH1....",
+      "...1H77H12222221H77H1...",
+      "...1H77H22222222H77H1...",
+      "....1HH1242222421HH1....",
+      ".....11252222225211.....",
+      "......122288882221......",
+      "......112222222211......",
+      ".....16611111111661.....",
+      "....1666666666666661....",
+      "...16661GGGGGG166661....",
+      "...1661GPPPPPPG16661....",
+      "...1221GPPPPPPG12261....",
+      "...1111G111111G11161....",
+      ".....16GR11111G6661.....",
+      "....1666GGGGGG66661.....",
+      "...1999911661199991.....",
+      "...111111....111111.....",
+      "........................",
+      "........................",
+      "........................",
+      "........................"
+    ].join('\n');
+
+    const LOUNGING_1 = [
+      "........................",
+      ".......11........11.....",
+      "......1231......1321....",
+      "......1231......1321....",
+      ".....11231.....11231....",
+      "....1HH1211111121HH1....",
+      "...1H77H12222221H77H1...",
+      "...1H77H22222222H77H1...",
+      "....1HH1242222421HH1....",
+      ".....11252222225211.....",
+      "......122288882221......",
+      "......112222222211......",
+      ".....16611111111661.....",
+      "....1666666666666661....",
+      "...16661GGGGGG166661....",
+      "...1661GPPPPPPG16661....",
+      "...1221GPP11PPG12261....",
+      "...1111G111111G11161....",
+      ".....16G11111RG6661.....",
+      "....1666GGGGGG66661.....",
+      "...1999911661199991.....",
+      "...111111....111111.....",
+      "........................",
+      "........................",
+      "........................",
+      "........................"
+    ].join('\n');
+
+    // SLEEPING (Curled up, eyes closed)
+    const SLEEPING_0 = [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........11......11......",
+      ".......1231....1321.....",
+      "......11231....13211....",
+      ".....1HH1211111121HH1...",
+      "....1H77H12222221H77H1..",
+      "....1H77H22222222H77H1..",
+      ".....1HH1211221121HH1...",
+      "......11252222225211....",
+      ".......122288882221.....",
+      ".......112222222211.....",
+      "......16611111111661....",
+      ".....1666666666666661...",
+      "....166666666666666661..",
+      "...16666666666666666661.",
+      "...12216666666666661221.",
+      "...11116666666666661111.",
+      "....1999911661199991....",
+      "....111111....111111....",
+      "........................",
+      "........................"
+    ].join('\n');
+
+    const SLEEPING_1 = [
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........................",
+      "........11......11......",
+      ".......1231....1321.....",
+      "......11231....13211....",
+      ".....1HH1211111121HH1...",
+      "....1H77H12222221H77H1..",
+      "....1H77H22222222H77H1..",
+      ".....1HH1211221121HH1...",
+      "......11252222225211....",
+      ".......122288882221.....",
+      ".......112222222211.....",
+      "......16611111111661....",
+      ".....1666666666666661...",
+      "....166666666666666661..",
+      "...16666666666666666661.",
+      "...12216666666666661221.",
+      "...11116666666666661111.",
+      "....1999911661199991....",
+      "....111111....111111....",
+      "........................"
+    ].join('\n');
+
+    // WAKE_UP (Startled jump, exclamation mark)
+    const WAKE_UP = [
+      "...........1E1..........",
+      "...........1E1..........",
+      "...........1E1..........",
+      "........................",
+      "...........1E1..........",
+      "........11......11......",
+      ".......1231....1321.....",
+      ".......1231....1321.....",
+      "......11231....13211....",
+      ".....1HH1211111121HH1...",
+      "....1H77H12222221H77H1..",
+      "....1H77H22222222H77H1..",
+      ".....1HH12442224421HH1..",
+      "......11252222225211....",
+      ".......122288882221.....",
+      ".......112222222211.....",
+      "....12211111111111221...",
+      "....11166666666666111...",
+      ".....166666666666661....",
+      ".....166666666666661....",
+      "......1666666666661.....",
+      ".......166661166661.....",
+      ".......16661..16661.....",
+      "......19991....19991....",
+      "......11111....11111....",
+      "........................"
+    ].join('\n');
+
+    // MUNCHING (Holding and crunching carrot)
+    const MUNCH_0 = [
+      "........11......11......",
+      ".......1231....1321.....",
+      ".......1231....1321.....",
+      "......11231....13211....",
+      ".....1HH1211111121HH1...",
+      "....1H77H12222221H77H1..",
+      "....1H77H22222222H77H1..",
+      ".....1HH12442224421HH1..",
+      "......11252222225211....",
+      ".......122288882221.....",
+      ".......112222222211.....",
+      "......16611111111661....",
+      ".....1666666666666661...",
+      "....166661LL1666666661..",
+      "....16661LLLL166666661..",
+      "....1221CCCCCCCC1221....",
+      ".....111CCCCCCC1111.....",
+      "......166CCCCC66661.....",
+      "......1666611666661.....",
+      ".......16661..16661.....",
+      "......19991....19991....",
+      "......11111....11111....",
+      "........................",
+      "........................",
+      "........................",
+      "........................"
+    ].join('\n');
+
+    const MUNCH_1 = [
+      "........11......11......",
+      ".......1231....1321.....",
+      ".......1231....1321.....",
+      "......11231....13211....",
+      ".....1HH1211111121HH1...",
+      "....1H77H12222221H77H1..",
+      "....1H77H22222222H77H1..",
+      ".....1HH12112221121HH1..",
+      "......11255222255211....",
+      ".......122288882221.....",
+      ".......112222222211.....",
+      "......16611111111661....",
+      ".....1666666666666661...",
+      "....166661LL1666666661..",
+      "....16661LLLL166666661..",
+      "....12211CCCCCC11221....",
+      ".....1111CCCCC11111.....",
+      "......1661CCC166661.....",
+      "......1666611666661.....",
+      ".......16661..16661.....",
+      "......19991....19991....",
+      "......11111....11111....",
+      "........................",
+      "........................",
+      "........................",
+      "........................"
+    ].join('\n');
+
     // DANGLING (Mouse Drag)
     const DANGLING = [
       "........11......11......",
@@ -282,7 +507,7 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
-    // JETPACK FLIGHT Frame 0 (Cool blue goggles, twin steel tanks)
+    // JETPACK FLIGHT Frames
     const JETPACK_0 = [
       "........11......11......",
       ".......1231....1321.....",
@@ -312,7 +537,6 @@ class BunnyPet {
       "........................"
     ].join('\n');
 
-    // JETPACK FLIGHT Frame 1 (Thruster burst)
     const JETPACK_1 = [
       "........11......11......",
       ".......1231....1321.....",
@@ -375,6 +599,10 @@ class BunnyPet {
     this.sprites = {
       idle: [IDLE_0, IDLE_1],
       dancing: [DANCING_0, DANCING_1, DANCING_2, DANCING_3],
+      lounging: [LOUNGING_0, LOUNGING_1],
+      sleeping: [SLEEPING_0, SLEEPING_1],
+      wake_up: [WAKE_UP],
+      munching: [MUNCH_0, MUNCH_1],
       dangling: [DANGLING],
       pocket_jetpack: [POCKET_ACTION],
       jetpack: [JETPACK_0, JETPACK_1],
@@ -387,7 +615,40 @@ class BunnyPet {
     let initialMouse = { x: 0, y: 0 };
     let initialWin = { x: 0, y: 0 };
 
+    this.canvas.addEventListener('mousemove', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      this.mouseCanvasX = e.clientX - rect.left;
+      this.mouseCanvasY = e.clientY - rect.top;
+
+      // Calculate pupil gaze offset (-1, 0, or 1 pixel)
+      const headCenterX = this.x + 12 * this.pixelSize;
+      const headCenterY = this.y + 8 * this.pixelSize;
+      const dx = this.mouseCanvasX - headCenterX;
+      const dy = this.mouseCanvasY - headCenterY;
+
+      this.eyeOffsetX = dx > 18 ? 1 : (dx < -18 ? -1 : 0);
+      this.eyeOffsetY = dy > 18 ? 1 : (dy < -18 ? -1 : 0);
+    });
+
+    this.canvas.addEventListener('mouseleave', () => {
+      this.mouseCanvasX = null;
+      this.mouseCanvasY = null;
+      this.eyeOffsetX = 0;
+      this.eyeOffsetY = 0;
+    });
+
+    // Right Click Context Menu
+    this.canvas.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (window.orphy && window.orphy.openBunnyContextMenu) {
+        window.orphy.openBunnyContextMenu();
+      }
+    });
+
     this.canvas.addEventListener('mousedown', async (e) => {
+      if (e.button !== 0) return; // Only left click for dragging
+      if (this.isLocked) return;
+
       isMouseDown = true;
       initialMouse = { x: e.screenX, y: e.screenY };
       
@@ -396,7 +657,7 @@ class BunnyPet {
       }
 
       this.isDragging = true;
-      this.recallActive = false; // Cancel any active recall flight
+      this.recallActive = false; // Cancel active recall
       this.jetpackActive = false;
       this.tiltAngle = 0;
       this.state = 'dangling';
@@ -404,7 +665,7 @@ class BunnyPet {
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (!isMouseDown || !this.isDragging) return;
+      if (!isMouseDown || !this.isDragging || this.isLocked) return;
       const dx = e.screenX - initialMouse.x;
       const dy = e.screenY - initialMouse.y;
       
@@ -423,10 +684,16 @@ class BunnyPet {
       }
     });
 
-    this.canvas.addEventListener('click', () => {
+    this.canvas.addEventListener('click', (e) => {
+      if (e.button !== 0) return;
       if (!this.isDragging && !this.recallActive) {
-        this.triggerHappy();
-        this.spawnHeartBurst();
+        // If asleep or lounging, tap wakes bunny up
+        if (this.state === 'sleeping' || this.state === 'lounging') {
+          this.triggerWakeUp();
+        } else {
+          this.triggerHappy();
+          this.spawnHeartBurst();
+        }
       }
     });
   }
@@ -437,17 +704,56 @@ class BunnyPet {
     window.orphy.onMediaUpdate((info) => {
       if (this.recallActive || this.isDragging) return;
       
-      if (info && info.title && info.isPlaying) {
-        if (this.state !== 'happy') this.state = 'dancing';
-      } else {
-        if (this.state !== 'happy') this.state = 'idle';
+      const wasPlaying = this.isMediaPlaying;
+      this.isMediaPlaying = !!(info && info.title && info.isPlaying);
+
+      // Music resumption trigger: wake up if was asleep or lounging
+      if (!wasPlaying && this.isMediaPlaying) {
+        if (this.pausedDuration >= 12 || this.state === 'sleeping' || this.state === 'lounging') {
+          this.pausedDuration = 0;
+          this.triggerWakeUp();
+        } else {
+          this.pausedDuration = 0;
+          this.state = 'dancing';
+        }
+      }
+
+      // Dynamic theme color update matching Island
+      if (info && info.thumbnailDataUrl && window.ThemeEngine) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const color = window.ThemeEngine.extractDominantColor(img);
+          this.themeColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
+        };
+        img.src = info.thumbnailDataUrl;
       }
     });
 
     window.orphy.onStartRecall((data) => {
-      console.log('[Orphy Bunny] Recall signal received! Starting Curvy Jetpack Flight...');
+      console.log('[Orphy Bunny] Flight signal received! Starting Curvy Jetpack Flight...');
       this.startCurvyJetpackFlight(data);
     });
+
+    window.orphy.onFeedCarrot(() => {
+      this.feedCarrot();
+    });
+
+    window.orphy.onIslandDragLag((data) => {
+      if (this.recallActive || this.isDragging) return;
+      // Inertial lag tilt
+      this.targetLagAngle = Math.max(-0.25, Math.min(0.25, -(data.vx || 0) * 0.04));
+    });
+
+    window.orphy.onLockChanged((locked) => {
+      this.isLocked = locked;
+    });
+
+    if (window.orphy.getLockState) {
+      window.orphy.getLockState().then(locked => {
+        this.isLocked = locked;
+      });
+    }
   }
 
   // ========================================================
@@ -468,7 +774,9 @@ class BunnyPet {
       this.triggerHappy();
       this.spawnHeartBurst();
       this.recallActive = false;
-      if (window.orphy && window.orphy.bunnyDocked) window.orphy.bunnyDocked();
+      if (data.dockOnArrival !== false && window.orphy && window.orphy.bunnyDocked) {
+        window.orphy.bunnyDocked();
+      }
       return;
     }
 
@@ -493,7 +801,7 @@ class BunnyPet {
     const nx = -dy / totalDist;
     const ny = dx / totalDist;
 
-    // Randomize curvature: graceful swoop (either high arc or looping curve)
+    // Randomize curvature: graceful swoop
     const arcDirection = (Math.random() > 0.5 ? 1 : -1);
     const curvatureMagnitude1 = totalDist * (0.25 + Math.random() * 0.25);
     const curvatureMagnitude2 = totalDist * (0.15 + Math.random() * 0.25) * (Math.random() > 0.4 ? 1 : -0.6);
@@ -509,14 +817,14 @@ class BunnyPet {
     };
     const P3 = { x: targetPos.x, y: targetPos.y };
 
-    // Clamp control points inside screen bounds (+ buffer) so flight stays visible
+    // Clamp control points inside screen bounds
     const pad = 30;
     P1.x = Math.max(bounds.x + pad, Math.min(bounds.x + bounds.width - 150, P1.x));
     P1.y = Math.max(bounds.y + pad, Math.min(bounds.y + bounds.height - 180, P1.y));
     P2.x = Math.max(bounds.x + pad, Math.min(bounds.x + bounds.width - 150, P2.x));
     P2.y = Math.max(bounds.y + pad, Math.min(bounds.y + bounds.height - 180, P2.y));
 
-    // Smooth duration: Paced, majestic flight (~2.2s to 3.8s depending on distance)
+    // Flight duration based on distance
     const flightDuration = Math.max(2200, Math.min(3800, totalDist * 2.6));
     const flightStart = performance.now();
 
@@ -530,7 +838,7 @@ class BunnyPet {
         const elapsed = now - flightStart;
         const rawT = Math.min(1, elapsed / flightDuration);
         
-        // Smooth Ease-in-out curve
+        // Ease-in-out curve
         const t = rawT < 0.5 ? 2 * rawT * rawT : -1 + (4 - 2 * rawT) * rawT;
 
         // Cubic Bezier interpolation
@@ -548,12 +856,11 @@ class BunnyPet {
           t * t * t * P3.y
         );
 
-        // Calculate velocity tangent for banking tilt and facing direction
+        // Velocity tangent for banking angle and facing
         const dXdt = 3 * u * u * (P1.x - P0.x) + 6 * u * t * (P2.x - P1.x) + 3 * t * t * (P3.x - P2.x);
         const dYdt = 3 * u * u * (P1.y - P0.y) + 6 * u * t * (P2.y - P1.y) + 3 * t * t * (P3.y - P2.y);
         
         this.facing = dXdt >= 0 ? 1 : -1;
-        // Subtle banking angle (tilt into the flight curve)
         const angle = Math.atan2(dYdt, Math.abs(dXdt));
         this.tiltAngle = Math.max(-0.25, Math.min(0.25, angle * 0.4));
 
@@ -578,14 +885,42 @@ class BunnyPet {
     this.spawnDustPuff();
     await this.sleep(300);
 
-    // Final docked celebration
+    // Final celebration
     this.recallActive = false;
-    this.state = 'happy';
     this.triggerHappy();
     this.spawnHeartBurst();
 
-    if (window.orphy && window.orphy.bunnyDocked) {
+    if (data.dockOnArrival !== false && window.orphy && window.orphy.bunnyDocked) {
       window.orphy.bunnyDocked();
+    }
+  }
+
+  // ========================================================
+  // SNACK FEEDING (Carrot Munching)
+  // ========================================================
+  feedCarrot() {
+    if (this.recallActive || this.isDragging) return;
+    this.fallingCarrot = {
+      x: this.x + 8 * this.pixelSize,
+      y: -15,
+      vy: 2.2,
+      active: true
+    };
+  }
+
+  spawnCarrotCrumbs() {
+    for (let i = 0; i < 4; i++) {
+      this.particles.push({
+        type: 'crumb',
+        x: this.x + 12 * this.pixelSize + (Math.random() * 12 - 6),
+        y: this.y + 14 * this.pixelSize,
+        vx: (Math.random() - 0.5) * 2.2,
+        vy: -1.0 - Math.random() * 1.5,
+        alpha: 1,
+        lifetime: 450,
+        size: 2 + Math.floor(Math.random() * 2),
+        color: Math.random() > 0.3 ? '#ea580c' : '#16a34a'
+      });
     }
   }
 
@@ -598,8 +933,14 @@ class BunnyPet {
     this.happyTimer = 1600;
   }
 
+  triggerWakeUp() {
+    this.state = 'wake_up';
+    this.wakeUpTimer = 750;
+    this.frame = 0;
+  }
+
   // ========================================================
-  // PARTICLES (Flames, Smoke Trail, Hearts, Dust)
+  // PARTICLES (Theme-Tinted Flames, Smoke, Hearts, Notes, Zzz)
   // ========================================================
   spawnJetpackBurst() {
     for (let i = 0; i < 8; i++) {
@@ -613,7 +954,8 @@ class BunnyPet {
     const nozzleY = this.y + 17 * this.pixelSize;
 
     [leftNozzleX, rightNozzleX].forEach(nx => {
-      // Hot fire spark
+      // Hot spark - core white/yellow with theme color aura
+      const sparkColor = Math.random() > 0.4 ? this.themeColor : (Math.random() > 0.5 ? '#ffffff' : '#ffea00');
       this.particles.push({
         type: 'flame',
         x: nx + (Math.random() * 4 - 2),
@@ -621,9 +963,9 @@ class BunnyPet {
         vx: (Math.random() - 0.5) * 0.8,
         vy: 1.8 + Math.random() * 2.0,
         alpha: 1,
-        lifetime: 280,
+        lifetime: 300,
         size: 3 + Math.floor(Math.random() * 3),
-        color: Math.random() > 0.4 ? '#ff3700' : '#ffea00'
+        color: sparkColor
       });
 
       // Billowing smoke puff
@@ -633,7 +975,7 @@ class BunnyPet {
         y: nozzleY + 6,
         vx: (Math.random() - 0.5) * 1.2,
         vy: 0.8 + Math.random() * 1.2,
-        alpha: 0.7,
+        alpha: 0.65,
         lifetime: 550,
         size: 4 + Math.floor(Math.random() * 4),
         color: '#64748b'
@@ -690,6 +1032,22 @@ class BunnyPet {
     });
   }
 
+  spawnSleepZ() {
+    this.particles.push({
+      type: 'sleep_z',
+      x: this.x + 16 * this.pixelSize,
+      y: this.y + 8 * this.pixelSize,
+      vx: 0.3 + Math.random() * 0.3,
+      vy: 0.6 + Math.random() * 0.4,
+      alpha: 0.9,
+      lifetime: 2400,
+      char: 'z',
+      phase: Math.random() * Math.PI,
+      size: 10,
+      color: '#93c5fd'
+    });
+  }
+
   startLoop() {
     const loop = (time) => {
       const dt = time - this.lastTime;
@@ -703,7 +1061,7 @@ class BunnyPet {
 
   update(dt) {
     this.frameTimer += dt;
-    const duration = this.state === 'jetpack' ? 120 : (this.state === 'dancing' ? 170 : 450);
+    const duration = this.state === 'jetpack' ? 120 : (this.state === 'dancing' ? 170 : (this.state === 'sleeping' ? 1100 : 450));
     
     if (this.frameTimer >= duration) {
       this.frameTimer = 0;
@@ -711,13 +1069,70 @@ class BunnyPet {
       this.frame = (this.frame + 1) % frames.length;
     }
 
+    // Music Pause Life Cycle State Machine
+    if (!this.isMediaPlaying && !this.recallActive && !this.isDragging) {
+      if (this.state !== 'happy' && this.state !== 'munching' && this.state !== 'wake_up') {
+        this.pausedDuration += dt / 1000;
+        if (this.pausedDuration >= 30) {
+          if (this.state !== 'sleeping') {
+            this.state = 'sleeping';
+            this.frame = 0;
+          }
+        } else if (this.pausedDuration >= 12) {
+          if (this.state !== 'lounging') {
+            this.state = 'lounging';
+            this.frame = 0;
+          }
+        } else {
+          if (this.state !== 'idle') {
+            this.state = 'idle';
+            this.frame = 0;
+          }
+        }
+      }
+    }
+
+    // Temporary States Countdowns
     if (this.state === 'happy') {
       this.happyTimer -= dt;
       if (this.happyTimer <= 0) {
-        this.state = 'idle';
+        this.state = this.isMediaPlaying ? 'dancing' : 'idle';
         this.frame = 0;
       }
     }
+
+    if (this.state === 'wake_up') {
+      this.wakeUpTimer -= dt;
+      if (this.wakeUpTimer <= 0) {
+        this.state = this.isMediaPlaying ? 'dancing' : 'idle';
+        this.frame = 0;
+      }
+    }
+
+    if (this.state === 'munching') {
+      this.munchTimer -= dt;
+      if (Math.random() > 0.7) this.spawnCarrotCrumbs();
+      if (this.munchTimer <= 0) {
+        this.triggerHappy();
+        this.spawnHeartBurst();
+        this.spawnHeartBurst();
+      }
+    }
+
+    // Falling Carrot Physics
+    if (this.fallingCarrot && this.fallingCarrot.active) {
+      this.fallingCarrot.y += this.fallingCarrot.vy * (dt / 16);
+      const catchY = this.y + 11 * this.pixelSize;
+      if (this.fallingCarrot.y >= catchY) {
+        this.fallingCarrot.active = false;
+        this.state = 'munching';
+        this.munchTimer = 1800;
+        this.frame = 0;
+      }
+    }
+
+    // Smooth Docked Lag Angle Recovery
+    this.dockedLagAngle += (this.targetLagAngle - this.dockedLagAngle) * 0.18;
 
     this.bouncePhase += dt * 0.005;
 
@@ -727,6 +1142,15 @@ class BunnyPet {
       if (this.particleTimer >= 400 && this.particles.length < 8) {
         this.particleTimer = 0;
         this.spawnMusicNote();
+      }
+    }
+
+    // Sleep Z particles when sleeping
+    if (this.state === 'sleeping') {
+      this.sleepParticleTimer += dt;
+      if (this.sleepParticleTimer >= 1300 && this.particles.length < 8) {
+        this.sleepParticleTimer = 0;
+        this.spawnSleepZ();
       }
     }
 
@@ -742,9 +1166,15 @@ class BunnyPet {
     // Update active particles
     this.particles = this.particles.filter(p => {
       p.alpha -= dt / p.lifetime;
-      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'dust') {
+      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'dust' || p.type === 'crumb') {
         p.y += p.vy * (dt / 16);
         p.x += (p.vx || 0) * (dt / 16);
+        if (p.type === 'crumb') p.vy += 0.1; // crumb gravity
+      } else if (p.type === 'sleep_z') {
+        p.y -= p.vy * (dt / 16);
+        p.x += Math.sin(p.phase + p.y * 0.03) * 0.4;
+        p.size += dt * 0.003;
+        if (p.size > 14) p.char = 'Z';
       } else {
         p.y -= p.vy * (dt / 16);
         p.x += Math.sin(p.phase + p.y * 0.04) * 0.5;
@@ -769,6 +1199,8 @@ class BunnyPet {
       hopOffset = -7;
     } else if (this.state === 'happy') {
       hopOffset = -10;
+    } else if (this.state === 'wake_up') {
+      hopOffset = -8;
     }
     renderY += hopOffset;
 
@@ -786,15 +1218,16 @@ class BunnyPet {
       this.ctx.restore();
     }
 
-    // Render Chibi Character with Facing & Flight Tilt
+    // Render Chibi Character with Facing & Tilt
     this.ctx.save();
     
-    // Banking tilt when flying
-    if (this.tiltAngle !== 0) {
+    // Determine active rotation: jetpack banking angle OR docked inertia lag
+    const activeTilt = this.jetpackActive ? (this.tiltAngle * this.facing) : this.dockedLagAngle;
+    if (activeTilt !== 0) {
       const cx = this.x + (24 * this.pixelSize) / 2;
       const cy = this.y + (26 * this.pixelSize) / 2;
       this.ctx.translate(cx, cy);
-      this.ctx.rotate(this.tiltAngle * this.facing);
+      this.ctx.rotate(activeTilt);
       this.ctx.translate(-cx, -cy);
     }
 
@@ -805,23 +1238,42 @@ class BunnyPet {
     this.renderSprite(sprite, this.x, renderY);
     this.ctx.restore();
 
-    // Render Particles (flames, smoke trail, hearts, notes)
+    // Render Falling Snack Carrot if active
+    if (this.fallingCarrot && this.fallingCarrot.active) {
+      this.renderCarrot(this.fallingCarrot.x, this.fallingCarrot.y);
+    }
+
+    // Render Particles
     this.particles.forEach(p => {
       this.ctx.save();
       this.ctx.globalAlpha = Math.max(0, p.alpha);
       
-      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'dust') {
+      if (p.type === 'flame' || p.type === 'smoke' || p.type === 'dust' || p.type === 'crumb') {
         this.ctx.fillStyle = p.color;
         this.ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
       } else {
         this.ctx.fillStyle = p.color || '#ffffff';
         this.ctx.shadowColor = this.themeColor;
         this.ctx.shadowBlur = 6;
-        this.ctx.font = `bold ${p.size}px monospace`;
+        this.ctx.font = `bold ${Math.round(p.size)}px monospace`;
         this.ctx.fillText(p.char, p.x, p.y);
       }
       this.ctx.restore();
     });
+  }
+
+  renderCarrot(cx, cy) {
+    const ps = this.pixelSize;
+    this.ctx.save();
+    // Green leaves
+    this.ctx.fillStyle = '#16a34a';
+    this.ctx.fillRect(cx + 2 * ps, cy, 3 * ps, 2 * ps);
+    // Orange body
+    this.ctx.fillStyle = '#ea580c';
+    this.ctx.fillRect(cx + 1 * ps, cy + 2 * ps, 5 * ps, 3 * ps);
+    this.ctx.fillRect(cx + 2 * ps, cy + 5 * ps, 3 * ps, 3 * ps);
+    this.ctx.fillRect(cx + 3 * ps, cy + 8 * ps, 1 * ps, 2 * ps);
+    this.ctx.restore();
   }
 
   renderSprite(spriteStr, x, y) {
@@ -840,7 +1292,15 @@ class BunnyPet {
       'J': '#64748b', // Jetpack steel
       'K': '#334155', // Nozzle
       'V': '#38bdf8', // Goggles / Visor
+      'G': '#94a3b8', // Game Boy casing
+      'P': '#84cc16', // Game Boy screen
+      'R': '#ef4444', // Red button
+      'C': '#ea580c', // Carrot orange
+      'L': '#16a34a', // Carrot leaf green
+      'E': '#ffea00', // Exclamation yellow
     };
+
+    const isTrackingEyes = (this.state === 'idle' || this.state === 'dancing' || this.state === 'lounging');
 
     const rows = spriteStr.trim().split('\n');
     rows.forEach((row, ry) => {
@@ -850,9 +1310,19 @@ class BunnyPet {
         const color = colorMap[c];
         if (color) {
           this.ctx.fillStyle = color;
+          
+          let drawX = x + rx * this.pixelSize;
+          let drawY = y + ry * this.pixelSize;
+
+          // Reactive Eye Gaze Shift
+          if (c === '4' && isTrackingEyes) {
+            drawX += this.eyeOffsetX * this.pixelSize;
+            drawY += this.eyeOffsetY * this.pixelSize;
+          }
+
           this.ctx.fillRect(
-            Math.round(x + rx * this.pixelSize),
-            Math.round(y + ry * this.pixelSize),
+            Math.round(drawX),
+            Math.round(drawY),
             this.pixelSize,
             this.pixelSize
           );

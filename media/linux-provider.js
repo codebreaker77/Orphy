@@ -75,10 +75,13 @@ class LinuxProvider {
     }
   }
 
-  async control(action) {
+  async control(action, arg) {
     if (action === 'toggle') await this.runCommand(['play-pause']);
     else if (action === 'next') await this.runCommand(['next']);
     else if (action === 'prev') await this.runCommand(['previous']);
+    else if (action === 'seek' && typeof arg === 'number') {
+      await this.runCommand(['position', Math.round(arg).toString()]);
+    }
     return true;
   }
 }

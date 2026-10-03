@@ -57,12 +57,51 @@ html, body {
   transition: box-shadow 0.6s ease, border-color 0.6s ease;
 }
 
+#island-container.locked {
+  -webkit-app-region: no-drag !important;
+}
+
 #island-container:hover {
   border-color: var(--theme-primary);
 }
 
-/* ========================================================
-   PIXEL ALBUM ART
+.pixel-badge {
+  display: none;
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  font-size: 7px;
+  z-index: 10;
+  opacity: 0.8;
+}
+
+#island-container.locked .pixel-badge {
+  display: block;
+}
+
+.pixel-toast {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-15px);
+  background: var(--theme-bg);
+  border: 1px solid var(--theme-primary);
+  color: var(--theme-text);
+  font-size: 6px;
+  padding: 3px 6px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 60;
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.pixel-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
    ======================================================== */
 #album-art-container {
   width: 68px;
@@ -223,6 +262,11 @@ html, body {
   position: relative;
   cursor: pointer;
   -webkit-app-region: no-drag;
+  transition: height 0.15s ease;
+}
+
+#progress-bar:hover {
+  height: 6px;
 }
 
 #progress-fill {
@@ -241,6 +285,13 @@ html, body {
   height: 8px;
   background: #ffffff;
   box-shadow: 0 0 3px rgba(255, 255, 255, 0.7);
+  transition: background-color 0.2s, height 0.15s;
+}
+
+#progress-bar:hover #progress-handle {
+  height: 10px;
+  top: -2px;
+  background: var(--theme-primary);
 }
 
 #time-row {
@@ -252,7 +303,7 @@ html, body {
 }
 
 /* ========================================================
-   CONTROLS & EQUALIZER
+   CONTROLS & 5-BAND EQUALIZER
    ======================================================== */
 #controls {
   display: flex;
@@ -261,31 +312,61 @@ html, body {
   margin-top: 1px;
 }
 
-/* 3-Bar Pixel Equalizer */
+/* 5-Band Pixel Spectrum Analyzer with Peak Hold */
 #pixel-equalizer {
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  width: 14px;
-  height: 12px;
+  width: 23px;
+  height: 14px;
   padding-bottom: 1px;
+  -webkit-app-region: no-drag;
+}
+
+.eq-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  width: 3px;
+  height: 100%;
+  position: relative;
+}
+
+.eq-peak {
+  width: 3px;
+  height: 1px;
+  background: #ffffff;
+  position: absolute;
+  top: 12px;
+  opacity: 0.8;
+  transition: top 0.08s ease;
 }
 
 .eq-bar {
   width: 3px;
-  background: var(--theme-primary);
-  height: 3px;
-  transition: height 0.15s ease;
+  background: repeating-linear-gradient(
+    to top,
+    var(--theme-primary) 0px,
+    var(--theme-primary) 2px,
+    transparent 2px,
+    transparent 3px
+  );
+  height: 2px;
+  transition: height 0.12s ease;
 }
 
-.eq-bar.active.bar-1 { animation: eqBounce 0.45s infinite alternate; }
-.eq-bar.active.bar-2 { animation: eqBounce 0.35s infinite alternate 0.1s; }
-.eq-bar.active.bar-3 { animation: eqBounce 0.55s infinite alternate 0.2s; }
+.eq-bar.active.bar-1 { animation: eqBounce1 0.42s infinite alternate ease-in-out; }
+.eq-bar.active.bar-2 { animation: eqBounce2 0.35s infinite alternate ease-in-out 0.07s; }
+.eq-bar.active.bar-3 { animation: eqBounce3 0.50s infinite alternate ease-in-out 0.14s; }
+.eq-bar.active.bar-4 { animation: eqBounce4 0.38s infinite alternate ease-in-out 0.03s; }
+.eq-bar.active.bar-5 { animation: eqBounce5 0.45s infinite alternate ease-in-out 0.10s; }
 
-@keyframes eqBounce {
-  0% { height: 2px; }
-  100% { height: 11px; }
-}
+@keyframes eqBounce1 { 0% { height: 2px; } 100% { height: 11px; } }
+@keyframes eqBounce2 { 0% { height: 3px; } 100% { height: 13px; } }
+@keyframes eqBounce3 { 0% { height: 2px; } 100% { height: 10px; } }
+@keyframes eqBounce4 { 0% { height: 4px; } 100% { height: 12px; } }
+@keyframes eqBounce5 { 0% { height: 2px; } 100% { height: 9px; } }
 
 #ctrl-group {
   display: flex;

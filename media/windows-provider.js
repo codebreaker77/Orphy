@@ -81,11 +81,15 @@ class WindowsProvider {
     }
   }
 
-  async control(action) {
+  async control(action, arg) {
     let method = '';
     if (action === 'toggle') method = 'TryTogglePlayPauseAsync()';
     else if (action === 'next') method = 'TrySkipNextAsync()';
     else if (action === 'prev') method = 'TrySkipPreviousAsync()';
+    else if (action === 'seek' && typeof arg === 'number') {
+      const secs = Math.max(0, Math.round(arg));
+      method = `TryChangePlaybackPositionAsync([System.TimeSpan]::FromSeconds(${secs}))`;
+    }
     else return false;
 
     const script = [

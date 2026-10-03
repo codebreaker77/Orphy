@@ -10,6 +10,11 @@
 </head>
 <body>
   <div id="island-container" class="pixel-box">
+    <!-- Notification Toast Banners -->
+    <div id="track-toast" class="pixel-toast">★ NOW PLAYING ★</div>
+    <div id="volume-toast" class="pixel-toast">VOL: 100%</div>
+    <div id="lock-badge" class="pixel-badge" title="Position Locked">🔒</div>
+
     <!-- Pixel Album Cover -->
     <div id="album-art-container">
       <canvas id="album-canvas" width="68" height="68"></canvas>
@@ -28,7 +33,7 @@
         
         <!-- Header Actions: Recall Bunny & Heart -->
         <div id="header-actions">
-          <button id="btn-recall" class="pixel-action-btn" title="Call Bunny Back (Hops & Climbs Screen)">
+          <button id="btn-recall" class="pixel-action-btn" title="Call Bunny Back (Curvy Jetpack Flight)">
             <svg viewBox="0 0 16 16" width="16" height="16">
               <!-- Pixel Bunny Head Icon -->
               <path class="pixel-path" d="M3,1 h2 v4 h-2 z M11,1 h2 v4 h-2 z M4,4 h8 v2 h-8 z M2,6 h12 v6 h-12 z M4,8 h2 v2 h-2 z M10,8 h2 v2 h-2 z M7,10 h2 v2 h-2 z"/>
@@ -44,9 +49,9 @@
         </div>
       </div>
 
-      <!-- Progress Section -->
+      <!-- Progress Section (Click to Seek) -->
       <div id="progress-section">
-        <div id="progress-bar">
+        <div id="progress-bar" title="Click to Seek">
           <div id="progress-fill">
             <div id="progress-handle"></div>
           </div>
@@ -59,11 +64,28 @@
 
       <!-- Bottom Controls Row -->
       <div id="controls">
-        <!-- Mini Pixel Equalizer -->
-        <div id="pixel-equalizer">
-          <div class="eq-bar bar-1"></div>
-          <div class="eq-bar bar-2"></div>
-          <div class="eq-bar bar-3"></div>
+        <!-- 5-Band Pixel Spectrum Analyzer with Peak Hold -->
+        <div id="pixel-equalizer" title="Pixel Spectrum">
+          <div class="eq-col">
+            <div class="eq-peak" id="peak-1"></div>
+            <div class="eq-bar bar-1"></div>
+          </div>
+          <div class="eq-col">
+            <div class="eq-peak" id="peak-2"></div>
+            <div class="eq-bar bar-2"></div>
+          </div>
+          <div class="eq-col">
+            <div class="eq-peak" id="peak-3"></div>
+            <div class="eq-bar bar-3"></div>
+          </div>
+          <div class="eq-col">
+            <div class="eq-peak" id="peak-4"></div>
+            <div class="eq-bar bar-4"></div>
+          </div>
+          <div class="eq-col">
+            <div class="eq-peak" id="peak-5"></div>
+            <div class="eq-bar bar-5"></div>
+          </div>
         </div>
 
         <div id="ctrl-group">

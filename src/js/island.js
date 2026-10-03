@@ -285,25 +285,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 1200);
   }
 
-  function updateGenreDisplay(info) {
-    if (!window.GenreDetector || !vibeBadge) return;
-    currentGenre = window.GenreDetector.detect(info);
-    const genreLabels = {
-      rock: '⚡ ROCK',
-      chill: '☕ LO-FI',
-      groove: '🎧 GROOVE',
-      energetic: '✦ DANCE',
-      standard: '♪ STEREO'
-    };
-    vibeBadge.textContent = genreLabels[currentGenre] || '♪ STEREO';
-  }
-
   function handleMediaUpdate(info) {
     if (!info || !info.title) {
       songTitle.textContent = 'WAITING FOR MUSIC...';
       songArtist.textContent = 'PLAY SOMETHING!';
       if (miniSongTitle) miniSongTitle.textContent = 'WAITING...';
-      if (vibeBadge) vibeBadge.textContent = '♪ HI-FI';
+      if (vibeBadge) vibeBadge.textContent = '⚡ STEREO';
       if (noArt) noArt.classList.remove('hidden');
       if (albumCtx) albumCtx.clearRect(0, 0, albumCanvas.width, albumCanvas.height);
       if (miniArtCtx) miniArtCtx.clearRect(0, 0, miniArtCanvas.width, miniArtCanvas.height);
@@ -327,8 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
     songTitle.textContent = (info.title || 'UNKNOWN').toUpperCase();
     songArtist.textContent = (info.artist || 'UNKNOWN ARTIST').toUpperCase();
     if (miniSongTitle) miniSongTitle.textContent = (info.title || 'UNKNOWN').toUpperCase();
-
-    updateGenreDisplay(info);
 
     if (songChanged) {
       showTrackToast(info.title.toUpperCase());
@@ -433,25 +418,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Heartbeat: Calculate EQ energy & detect beat drops for Mascot & Island pulse!
+    // Heartbeat: Calculate EQ bass and average energy for Mascot
     const bassEnergy = (barHeights[0] + barHeights[1] + barHeights[2] + barHeights[3]) / 4;
-    const isBeatDrop = isMusicPlaying && (barHeights[0] > 12.5 || (barHeights[1] > 12.5 && barHeights[0] > 10));
 
-    // Tactile bump on beat drop
-    if (isBeatDrop && !islandContainer.classList.contains('beat-pulse')) {
-      islandContainer.classList.add('beat-pulse');
-      setTimeout(() => islandContainer.classList.remove('beat-pulse'), 140);
-    }
-
-    // Send EQ energy heartbeat packet to Mascot (~50ms throttled)
+    // Send smooth EQ energy packet to Mascot (~50ms throttled)
     if (time - lastEqSendTime > 50) {
       lastEqSendTime = time;
       if (window.orphy && window.orphy.sendEqEnergy) {
         window.orphy.sendEqEnergy({
           energy: sumHeight / (numBands * maxH), // normalized 0.0 - 1.0
           bass: bassEnergy / maxH,
-          isBeatDrop,
-          genre: currentGenre,
           isPlaying: isMusicPlaying
         });
       }

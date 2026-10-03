@@ -44,11 +44,15 @@ class BunnyPet {
     // Interactive Snack Feeding (Carrot)
     this.fallingCarrot = null;
 
-    // EQ Heartbeat & Drop Reactive Physics
+    // EQ Heartbeat & Smooth Rhythm Dance
     this.eqEnergy = 0;
     this.eqBass = 0;
-    this.beatJumpY = 0;
+    this.dancePhase = 0;
+    this.dropJumpActive = false;
+    this.dropJumpProgress = 0;
+    this.dropJumpCooldown = 0;
     this.trackDropY = 0;
+    this.trackDropVy = 0;
 
     // Reactive Eye Tracking
     this.mouseCanvasX = null;
@@ -733,13 +737,14 @@ class BunnyPet {
       }
     });
 
-    // Listen to EQ Energy & Beat Drop Heartbeat from Island
+    // Listen to smooth EQ Energy & Tempo from Island
     if (window.orphy.onEqEnergy) {
       window.orphy.onEqEnergy((data) => {
         this.eqEnergy = data.energy || 0;
         this.eqBass = data.bass || 0;
 
-        if (data.isBeatDrop && this.state !== 'jetpack' && this.state !== 'dangling') {
+        // Graceful beat drop jump only on strong bass drop when not already mid-jump
+        if (this.eqBass > 0.82 && !this.dropJumpActive && this.dropJumpCooldown <= 0 && this.state === 'dancing') {
           this.triggerBeatDropJump();
         }
       });
@@ -945,12 +950,16 @@ class BunnyPet {
   }
 
   triggerBeatDropJump() {
-    this.beatJumpY = -12;
+    if (this.dropJumpActive || this.recallActive || this.isDragging) return;
+    this.dropJumpActive = true;
+    this.dropJumpProgress = 0;
+    this.dropJumpCooldown = 750; // Prevent rapid re-triggers
     this.spawnMusicalNotes();
   }
 
   triggerTrackDrop() {
     this.trackDropY = -35;
+    this.trackDropVy = 0;
     this.triggerHappy();
     this.spawnHeartBurst();
   }
@@ -1133,23 +1142,22 @@ class BunnyPet {
   update(dt) {
     this.frameTimer += dt;
     
-    // Genre-dependent frame pace!
-    let duration = 400;
-    if (this.state === 'jetpack') {
-      duration = 120;
-    } else if (this.state === 'dancing') {
-      if (this.genreVibe === 'rock') duration = 150;
-      else if (this.genreVibe === 'chill') duration = 420; // slow sway
-      else if (this.genreVibe === 'energetic') duration = 140; // fast rave
-      else duration = 190;
-    } else if (this.state === 'sleeping') {
-      duration = 1100;
-    }
-    
-    if (this.frameTimer >= duration) {
-      this.frameTimer = 0;
+    // Smooth tempo calculation when dancing (120 BPM: 480ms cycle)
+    if (this.state === 'dancing') {
+      const beatCycle = 480;
+      this.dancePhase = (this.dancePhase + (dt / beatCycle)) % 1.0;
       const frames = this.getCurrentSpriteFrames();
-      this.frame = (this.frame + 1) % frames.length;
+      this.frame = Math.floor(this.dancePhase * frames.length) % frames.length;
+    } else {
+      let duration = 400;
+      if (this.state === 'jetpack') duration = 120;
+      else if (this.state === 'sleeping') duration = 1100;
+      
+      if (this.frameTimer >= duration) {
+        this.frameTimer = 0;
+        const frames = this.getCurrentSpriteFrames();
+        this.frame = (this.frame + 1) % frames.length;
+      }
     }
 
     // Music Pause Life Cycle State Machine
@@ -1213,21 +1221,38 @@ class BunnyPet {
       }
     }
 
-    // Smooth return for beat drop jump and track drop fall
-    this.beatJumpY += (0 - this.beatJumpY) * 0.22;
+    // Drop Jump Progression & Cooldown
+    if (this.dropJumpCooldown > 0) {
+      this.dropJumpCooldown -= dt;
+    }
+
+    if (this.dropJumpActive) {
+      this.dropJumpProgress += dt / 450;
+      if (this.dropJumpProgress >= 1.0) {
+        this.dropJumpProgress = 1.0;
+        this.dropJumpActive = false;
+      }
+    }
+
+    // Smooth Spring Return on Track Drop
     if (this.trackDropY < 0) {
-      this.trackDropY = Math.min(0, this.trackDropY + dt * 0.12);
+      this.trackDropVy += 0.12 * (dt / 16);
+      this.trackDropY += this.trackDropVy * (dt / 16);
+      if (this.trackDropY >= 0) {
+        this.trackDropY = 0;
+        this.trackDropVy = 0;
+      }
     }
 
     // Smooth Docked Lag Angle Recovery
     this.dockedLagAngle += (this.targetLagAngle - this.dockedLagAngle) * 0.18;
 
-    this.bouncePhase += dt * (this.genreVibe === 'rock' ? 0.012 : (this.genreVibe === 'chill' ? 0.003 : 0.006));
+    this.bouncePhase += dt * 0.005;
 
     // Musical emission when dancing
     if (this.state === 'dancing') {
       this.particleTimer += dt;
-      const spawnInterval = this.genreVibe === 'rock' ? 300 : (this.genreVibe === 'chill' ? 650 : 420);
+      const spawnInterval = 450;
       if (this.particleTimer >= spawnInterval && this.particles.length < 8) {
         this.particleTimer = 0;
         this.spawnGenreParticle();
@@ -1279,27 +1304,31 @@ class BunnyPet {
     const frames = this.getCurrentSpriteFrames();
     const sprite = frames[this.frame % frames.length];
 
-    let renderY = this.y + this.beatJumpY + this.trackDropY;
+    let renderY = this.y;
     let hopOffset = 0;
-
-    // Modulate hop amplitude directly with live EQ bass amplitude
-    const eqMultiplier = 0.7 + (this.eqBass || 0.3) * 0.8;
 
     if (this.state === 'idle') {
       renderY += Math.sin(this.bouncePhase) * 2;
     } else if (this.state === 'dancing') {
-      if (this.genreVibe === 'rock' && (this.frame === 1 || this.frame === 3)) {
-        hopOffset = 4 * eqMultiplier; // Headbang dip down!
-      } else if (this.genreVibe === 'chill') {
-        renderY += Math.sin(this.bouncePhase) * 2.5; // Soft sway
-      } else if (this.frame === 1 || this.frame === 3) {
-        hopOffset = -7 * eqMultiplier;
-      }
+      // Continuous, smooth parabolic hop curve driven by dancePhase (zero jitter!)
+      const hopCurve = Math.sin(this.dancePhase * Math.PI); // 0.0 -> 1.0 -> 0.0
+      const hopHeight = 6 * (0.7 + (this.eqBass || 0.3) * 0.8);
+      hopOffset = -hopCurve * hopHeight;
     } else if (this.state === 'happy') {
       hopOffset = -10;
     } else if (this.state === 'wake_up') {
       hopOffset = -8;
     }
+
+    // Add smooth acrobatic drop-jump arc if active
+    if (this.dropJumpActive) {
+      const dropJumpArc = -Math.sin(this.dropJumpProgress * Math.PI) * 14;
+      hopOffset += dropJumpArc;
+    }
+
+    // Add track drop offset if active
+    hopOffset += this.trackDropY;
+
     renderY += hopOffset;
 
     // Shadow (only on ground)

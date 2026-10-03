@@ -1,16 +1,18 @@
 /* Orphy Dynamic Island — Retro Indie Hi-Fi Music Deck */
 :root {
-  --theme-primary: #e64c65;
-  --theme-primary-glow: rgba(230, 76, 101, 0.45);
-  --theme-bg: #111420;
-  --theme-deck: #0d0f19;
-  --theme-bezel: #1c2235;
-  --theme-rim: #07090f;
+  --theme-primary: #f59e0b;
+  --theme-primary-glow: rgba(245, 158, 11, 0.35);
+  --theme-bg: #0f121d;
+  --theme-deck: #090c15;
+  --theme-bezel: #1b2133;
+  --theme-rim: #07080f;
   --theme-text: #ffffff;
-  --theme-text-muted: #7281a0;
-  --theme-track: #20273a;
+  --theme-text-muted: #6e7d9c;
+  --theme-track: #1e2538;
   --theme-fill: #eef2fa;
-  --theme-chip-bg: #161c2b;
+  --theme-chip-bg: rgba(245, 158, 11, 0.12);
+  --theme-chip-border: rgba(245, 158, 11, 0.35);
+  --theme-chip-text: #f59e0b;
 }
 
 * {
@@ -46,19 +48,9 @@ html, body {
   -webkit-app-region: drag;
   transition: width 0.32s cubic-bezier(0.16, 1, 0.3, 1),
               height 0.32s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.2s ease,
-              border-color 0.4s ease,
-              transform 0.12s ease;
+              box-shadow 0.25s ease,
+              border-color 0.4s ease;
   overflow: hidden;
-}
-
-/* Tactile Bass Drop Bump (Triggered by EQ Peak) */
-#island-container.beat-pulse {
-  transform: scale(1.02);
-  box-shadow:
-    0 0 0 3px var(--theme-primary),
-    0 10px 30px rgba(0, 0, 0, 0.95),
-    0 0 36px var(--theme-primary-glow);
 }
 
 #island-container.locked {
@@ -74,8 +66,8 @@ html, body {
    ======================================================== */
 #island-container.state-expanded {
   width: 440px;
-  height: 150px;
-  padding: 10px 12px;
+  height: 154px;
+  padding: 12px 14px 14px 14px;
   
   /* 8-bit stepped pixel corners */
   clip-path: polygon(
@@ -234,7 +226,6 @@ html, body {
   text-overflow: ellipsis;
   letter-spacing: 0.5px;
   line-height: 1.2;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
 #meta-subline {
@@ -254,13 +245,14 @@ html, body {
   letter-spacing: 0.2px;
 }
 
+/* Retro STEREO Chip (Amber/Gold Accent) */
 .pixel-chip {
   font-size: 5.5px;
   padding: 1px 4px;
   background: var(--theme-chip-bg);
-  border: 1px solid var(--theme-bezel);
-  color: var(--theme-primary);
-  letter-spacing: 0.4px;
+  border: 1px solid var(--theme-chip-border);
+  color: var(--theme-chip-text);
+  letter-spacing: 0.5px;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -322,33 +314,26 @@ html, body {
 }
 
 #btn-heart.liked svg {
-  fill: var(--theme-primary);
+  fill: #e64c65;
 }
 
 /* ========================================================
-   SECTION 2: MID-DECK (CASSETTE + 16-BAND EQ + SCRUBBER)
+   SECTION 2: MID-DECK (ALBUM ART + 16-BAND EQ + SCRUBBER)
    ======================================================== */
 #mid-deck {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin: 3px 0;
+  margin: 4px 0 2px 0;
 }
 
-/* PHYSICAL CASSETTE ART DECK */
-#cassette-deck {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  flex-shrink: 0;
-}
-
-#cassette-body {
-  width: 62px;
-  height: 62px;
+/* CLEAN SQUARE ALBUM ART CONTAINER */
+#album-art-container {
+  width: 64px;
+  height: 64px;
+  min-width: 64px;
   background: #090b12;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   outline: 1px solid #000000;
   box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.8), 0 0 10px rgba(0, 0, 0, 0.5);
   position: relative;
@@ -356,46 +341,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* 1px Animated Tape Shimmer Sweep */
-.cassette-shimmer {
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  pointer-events: none;
-  z-index: 5;
-  background: linear-gradient(
-    135deg,
-    transparent 43%,
-    rgba(255, 255, 255, 0.35) 50%,
-    transparent 57%
-  );
-  animation: cassetteShimmerSweep 5s ease-in-out infinite;
-}
-
-@keyframes cassetteShimmerSweep {
-  0% { transform: translate(-100%, -100%); }
-  25% { transform: translate(100%, 100%); }
-  100% { transform: translate(100%, 100%); }
-}
-
-/* Subtle Scanline Texture */
-.cassette-scanlines {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 4;
-  background: repeating-linear-gradient(
-    0deg,
-    rgba(0, 0, 0, 0.3) 0px,
-    rgba(0, 0, 0, 0.3) 1px,
-    transparent 1px,
-    transparent 2px
-  );
-  opacity: 0.75;
+  flex-shrink: 0;
 }
 
 #album-canvas {
@@ -429,28 +375,13 @@ html, body {
   50% { transform: translateY(-3px); }
 }
 
-/* Tiny Physical Cassette Paper Sticker */
-.cassette-sticker {
-  display: flex;
-  justify-content: space-between;
-  width: 62px;
-  padding: 1px 3px;
-  background: #ded9c5;
-  border: 1px solid #141822;
-  color: #141822;
-  font-size: 5px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.6);
-}
-
 /* RIGHT COLUMN: 16-BAND EQ & SCRUBBER */
 #deck-right {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
 }
 
 /* EXTENDED 16-BAND SPECTRUM ANALYZER */
@@ -487,8 +418,8 @@ html, body {
   background: #ffffff;
   position: absolute;
   top: 15px;
-  opacity: 0.9;
-  box-shadow: 0 0 2px rgba(255, 255, 255, 0.8);
+  opacity: 0.95;
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.9);
   pointer-events: none;
 }
 
@@ -496,8 +427,8 @@ html, body {
   width: 100%;
   background: repeating-linear-gradient(
     to top,
-    var(--theme-primary) 0px,
-    var(--theme-primary) 2px,
+    #f59e0b 0px,
+    #f59e0b 2px,
     transparent 2px,
     transparent 3px
   );
@@ -509,7 +440,7 @@ html, body {
 #progress-section {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   -webkit-app-region: no-drag;
 }
 
@@ -547,7 +478,7 @@ html, body {
   width: 4px;
   height: 8px;
   background: #ffffff;
-  box-shadow: 0 0 3px rgba(255, 255, 255, 0.8);
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.9);
   pointer-events: none;
   transition: background-color 0.15s;
 }
@@ -584,26 +515,22 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 6px;
+  font-size: 6.5px;
   color: var(--theme-text-muted);
-}
-
-#format-tag {
-  font-size: 5px;
-  letter-spacing: 0.5px;
-  opacity: 0.6;
 }
 
 /* ========================================================
    SECTION 3: CENTERED TRANSPORT CONTROLS (↶ ◀ [▶] ▶ ↷)
+   Pushed up with bottom margin
    ======================================================== */
 #controls {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   -webkit-app-region: no-drag;
-  margin-top: 1px;
+  margin-top: 3px;
+  margin-bottom: 4px;
 }
 
 .pixel-ctrl-btn {

@@ -593,17 +593,7 @@ class BunnyPet {
       this.eyeOffsetX = dx > 16 ? 1 : (dx < -16 ? -1 : 0);
       this.eyeOffsetY = dy > 16 ? 1 : (dy < -16 ? -1 : 0);
 
-      // Selective click-through for transparent bounds
-      const bx = this.x;
-      const by = this.y;
-      const bw = 24 * this.pixelSize;
-      const bh = 28 * this.pixelSize;
-      const isOverBunny = (this.mouseCanvasX >= bx - 6 && this.mouseCanvasX <= bx + bw + 6 &&
-                           this.mouseCanvasY >= by - 6 && this.mouseCanvasY <= by + bh + 6);
-
-      if (window.orphy && window.orphy.setBunnyIgnoreMouse) {
-        window.orphy.setBunnyIgnoreMouse(!isOverBunny && !this.isDragging);
-      }
+      // Selective click-through not needed for small 140x160 canvas
     });
 
     this.canvas.addEventListener('mouseleave', () => {
@@ -611,9 +601,6 @@ class BunnyPet {
       this.mouseCanvasY = null;
       this.eyeOffsetX = 0;
       this.eyeOffsetY = 0;
-      if (!this.isDragging && window.orphy && window.orphy.setBunnyIgnoreMouse) {
-        window.orphy.setBunnyIgnoreMouse(true);
-      }
     });
 
     // Right Click Context Menu
@@ -641,9 +628,6 @@ class BunnyPet {
       this.tiltAngle = 0;
       this.state = 'dangling';
       this.canvas.style.cursor = 'grabbing';
-      if (window.orphy && window.orphy.setBunnyIgnoreMouse) {
-        window.orphy.setBunnyIgnoreMouse(false);
-      }
     });
 
     window.addEventListener('mousemove', (e) => {
@@ -689,9 +673,6 @@ class BunnyPet {
     this.canvas.style.cursor = 'grab';
     this.triggerHappy();
     this.spawnHeartBurst();
-    if (window.orphy && window.orphy.setBunnyIgnoreMouse) {
-      window.orphy.setBunnyIgnoreMouse(false);
-    }
   }
 
   setupIPC() {
@@ -1119,10 +1100,14 @@ class BunnyPet {
 
   startLoop() {
     const loop = (time) => {
-      const dt = time - this.lastTime;
-      this.lastTime = time;
-      this.update(dt);
-      this.render();
+      try {
+        const dt = Math.min(100, Math.max(1, time - this.lastTime));
+        this.lastTime = time;
+        this.update(dt);
+        this.render();
+      } catch (err) {
+        console.error('[Bunny Animation Error]', err);
+      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -1333,16 +1318,18 @@ class BunnyPet {
 
     // Shadow (only on ground)
     if (this.state !== 'dangling' && !this.jetpackActive) {
-      const shadowScale = 1 - Math.abs(hopOffset) / 35;
-      this.ctx.save();
-      this.ctx.globalAlpha = 0.28 * shadowScale;
-      this.ctx.fillStyle = '#06080e';
-      this.ctx.beginPath();
-      const shadowCx = this.x + (24 * this.pixelSize) / 2;
-      const shadowCy = this.y + 28 * this.pixelSize - 2;
-      this.ctx.ellipse(shadowCx, shadowCy, 26 * shadowScale, 5 * shadowScale, 0, 0, Math.PI * 2);
-      this.ctx.fill();
-      this.ctx.restore();
+      const shadowScale = Math.max(0, 1 - Math.abs(hopOffset) / 35);
+      if (shadowScale > 0.02) {
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.28 * shadowScale;
+        this.ctx.fillStyle = '#06080e';
+        this.ctx.beginPath();
+        const shadowCx = this.x + (24 * this.pixelSize) / 2;
+        const shadowCy = this.y + 28 * this.pixelSize - 2;
+        this.ctx.ellipse(shadowCx, shadowCy, Math.max(1, 26 * shadowScale), Math.max(1, 5 * shadowScale), 0, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.restore();
+      }
     }
 
     // Render Chibi Character

@@ -98,11 +98,17 @@ function createWindows() {
   startX = clampedIsland.x;
   startY = clampedIsland.y;
 
-  // Determine starting Bunny coordinates (mascot docks beside the island on the right)
-  let bX = config.bunnyX != null ? config.bunnyX : startX + ISLAND_WIDTH + 6;
+  // Determine starting Bunny coordinates (mascot docks beside the island)
+  const islandDisplay = screen.getDisplayNearestPoint({ x: startX, y: startY }) || screen.getPrimaryDisplay();
+  const islandWorkArea = islandDisplay.workArea;
+  let preferredDockX = startX + ISLAND_WIDTH + 6;
+  if (preferredDockX + BUNNY_WIDTH > islandWorkArea.x + islandWorkArea.width) {
+    preferredDockX = startX - BUNNY_WIDTH - 6;
+  }
+  let bX = config.bunnyX != null ? config.bunnyX : preferredDockX;
   let bY = config.bunnyY != null ? config.bunnyY : startY + 4;
   if (config.isDocked) {
-    bX = startX + ISLAND_WIDTH + 6;
+    bX = preferredDockX;
     bY = startY + 4;
   }
   const clampedBunny = clampToBounds(bX, bY, BUNNY_WIDTH, BUNNY_HEIGHT);
@@ -281,10 +287,20 @@ function getDockedBunnyPosition(mode = 'expanded') {
   if (!islandWindow || islandWindow.isDestroyed()) return { x: 0, y: 0 };
   const [ix, iy] = islandWindow.getPosition();
   const currentIslandW = (mode === 'collapsed') ? 240 : ISLAND_WIDTH;
-  return {
-    x: ix + currentIslandW + 6,
-    y: iy + 4
-  };
+
+  const display = screen.getDisplayNearestPoint({ x: ix, y: iy }) || screen.getPrimaryDisplay();
+  const workArea = display.workArea;
+
+  // Prefer docking on right side; if offscreen, dock on left side
+  let dockX = ix + currentIslandW + 6;
+  if (dockX + BUNNY_WIDTH > workArea.x + workArea.width) {
+    dockX = ix - BUNNY_WIDTH - 6;
+  }
+  dockX = Math.max(workArea.x, Math.min(workArea.x + workArea.width - BUNNY_WIDTH, dockX));
+
+  let dockY = Math.max(workArea.y, Math.min(workArea.y + workArea.height - BUNNY_HEIGHT, iy + 4));
+
+  return { x: Math.round(dockX), y: Math.round(dockY) };
 }
 
 function triggerRecall() {
@@ -454,11 +470,8 @@ ipcMain.handle('get-lock-state', () => {
   return config.isLocked;
 });
 
-// Selective click-through for transparent companion bounds
-ipcMain.handle('set-bunny-ignore-mouse', (_event, ignore) => {
-  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
-    bunnyWindow.setIgnoreMouseEvents(ignore, { forward: true });
-  }
+// Selective click-through: keep disabled to ensure stable rendering on Windows DWM
+ipcMain.handle('set-bunny-ignore-mouse', () => {
   return true;
 });
 

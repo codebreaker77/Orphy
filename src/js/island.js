@@ -34,14 +34,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentTitle = '';
   let currentDuration = 0;
-  let themeApplied = false;
+  let isMusicPlaying = false;
+  let hasRenderedThumbnail = false;
+  let lastThumbnailUrl = null;
   let toastTimeout = null;
   let volToastTimeout = null;
   let simulatedVol = 100;
 
-  // Peak hold physics state
+  // Spectrum Analyzer State (Pure JS, ZERO DOM layout reads!)
+  const barHeights = [2, 2, 2, 2, 2];
+  const targetHeights = [2, 2, 2, 2, 2];
   const peakPositions = [0, 0, 0, 0, 0];
   const peakHoldTimers = [0, 0, 0, 0, 0];
+  let spectrumPhase = 0;
+  let lastPeakTime = performance.now();
 
   // Right Click Context Menu
   window.addEventListener('contextmenu', (e) => {
@@ -74,7 +80,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const clickRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
       const targetSec = clickRatio * currentDuration;
 
-      // Update UI immediately for responsiveness
       progressFill.style.width = `${clickRatio * 100}%`;
       timeCurrent.textContent = formatTime(targetSec);
 
@@ -145,16 +150,18 @@ document.addEventListener('DOMContentLoaded', () => {
       timeTotal.textContent = '0:00';
       progressFill.style.width = '0%';
       setPlayPauseState(false);
-      eqBars.forEach(b => b.classList.remove('active'));
+      isMusicPlaying = false;
       currentTitle = '';
       currentDuration = 0;
-      themeApplied = false;
+      hasRenderedThumbnail = false;
+      lastThumbnailUrl = null;
       return;
     }
 
     const songChanged = currentTitle !== info.title;
     currentTitle = info.title;
     currentDuration = info.duration || 0;
+    isMusicPlaying = !!info.isPlaying;
 
     songTitle.textContent = (info.title || 'UNKNOWN').toUpperCase();
     songArtist.textContent = (info.artist || 'UNKNOWN ARTIST').toUpperCase();
@@ -163,15 +170,19 @@ document.addEventListener('DOMContentLoaded', () => {
       showTrackToast(info.title);
     }
 
-    // Render Pixelated Album Cover
+    // Render Pixelated Album Cover ONLY when image changes!
     if (info.thumbnailDataUrl) {
-      renderPixelAlbumArt(info.thumbnailDataUrl);
-      if (!themeApplied || songChanged) {
+      if (songChanged || lastThumbnailUrl !== info.thumbnailDataUrl || !hasRenderedThumbnail) {
+        lastThumbnailUrl = info.thumbnailDataUrl;
+        hasRenderedThumbnail = true;
+        renderPixelAlbumArt(info.thumbnailDataUrl);
         extractThemeFromThumb(info.thumbnailDataUrl);
       }
     } else {
       if (noArt) noArt.classList.remove('hidden');
       if (albumCtx) albumCtx.clearRect(0, 0, albumCanvas.width, albumCanvas.height);
+      hasRenderedThumbnail = false;
+      lastThumbnailUrl = null;
     }
 
     // Progress
@@ -182,43 +193,54 @@ document.addEventListener('DOMContentLoaded', () => {
     timeCurrent.textContent = formatTime(pos);
     timeTotal.textContent = formatTime(dur);
 
-    // Play/Pause & 5-Band Equalizer State
     setPlayPauseState(info.isPlaying);
-    eqBars.forEach(b => {
-      if (info.isPlaying) b.classList.add('active');
-      else b.classList.remove('active');
-    });
   }
 
-  // Peak hold physics update loop for 5-band spectrum
-  let lastPeakTime = performance.now();
+  // Highly Optimized 60FPS Spectrum Analyzer (NO clientHeight forced reflows!)
   function updateSpectrumPeaks(time) {
-    const dt = (time - lastPeakTime) / 1000;
+    const dt = Math.min(0.05, (time - lastPeakTime) / 1000);
     lastPeakTime = time;
 
-    eqBars.forEach((bar, idx) => {
-      const peakEl = eqPeaks[idx];
-      if (!peakEl) return;
+    if (isMusicPlaying) {
+      spectrumPhase += dt * 8;
+      targetHeights[0] = 3 + Math.sin(spectrumPhase * 1.3) * 4 + Math.sin(spectrumPhase * 2.7) * 3;
+      targetHeights[1] = 4 + Math.cos(spectrumPhase * 1.8) * 5 + Math.sin(spectrumPhase * 3.1) * 3;
+      targetHeights[2] = 3 + Math.sin(spectrumPhase * 2.2) * 4 + Math.cos(spectrumPhase * 4.0) * 3;
+      targetHeights[3] = 4 + Math.cos(spectrumPhase * 2.9) * 4 + Math.sin(spectrumPhase * 5.2) * 3;
+      targetHeights[4] = 2 + Math.sin(spectrumPhase * 3.6) * 3 + Math.cos(spectrumPhase * 6.1) * 3;
+    } else {
+      targetHeights[0] = 2;
+      targetHeights[1] = 2;
+      targetHeights[2] = 2;
+      targetHeights[3] = 2;
+      targetHeights[4] = 2;
+    }
 
-      const barH = bar.clientHeight;
-      const currentPeak = peakPositions[idx];
+    for (let i = 0; i < 5; i++) {
+      const clampedTarget = Math.max(2, Math.min(13, targetHeights[i]));
+      barHeights[i] += (clampedTarget - barHeights[i]) * 0.28;
 
-      if (barH >= currentPeak) {
-        peakPositions[idx] = barH;
-        peakHoldTimers[idx] = 0.25; // Hold for 250ms at peak
+      const curH = barHeights[i];
+      const bar = eqBars[i];
+      if (bar) bar.style.height = `${Math.round(curH)}px`;
+
+      if (curH >= peakPositions[i]) {
+        peakPositions[i] = curH;
+        peakHoldTimers[i] = 0.22;
       } else {
-        if (peakHoldTimers[idx] > 0) {
-          peakHoldTimers[idx] -= dt;
+        if (peakHoldTimers[i] > 0) {
+          peakHoldTimers[i] -= dt;
         } else {
-          // Fall with gravity
-          peakPositions[idx] = Math.max(0, currentPeak - 18 * dt);
+          peakPositions[i] = Math.max(0, peakPositions[i] - 16 * dt);
         }
       }
 
-      // Convert bar height (0 to 14px) to top position (14px down to 0px)
-      const topPx = Math.max(0, 13 - Math.round(peakPositions[idx]));
-      peakEl.style.top = `${topPx}px`;
-    });
+      const peakEl = eqPeaks[i];
+      if (peakEl) {
+        const topPx = Math.max(0, 13 - Math.round(peakPositions[i]));
+        peakEl.style.top = `${topPx}px`;
+      }
+    }
 
     requestAnimationFrame(updateSpectrumPeaks);
   }
@@ -259,7 +281,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (window.ThemeEngine) {
         const color = window.ThemeEngine.extractDominantColor(img);
         setThemeColor(color.r, color.g, color.b);
-        themeApplied = true;
       }
     };
     img.src = dataUrl;

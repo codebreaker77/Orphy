@@ -1,6 +1,7 @@
-const { execFile } = require('child_process');
+const { spawn, execFile } = require('child_process');
+const readline = require('readline');
 
-const PS_SCRIPT = `
+const DAEMON_SCRIPT = `
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation\`1' })[0]
 Function Await($WinRtTask, $ResultType) {
@@ -10,75 +11,166 @@ Function Await($WinRtTask, $ResultType) {
     return $netTask.Result
 }
 [Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime] | Out-Null
-$mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
-$session = $mgr.GetCurrentSession()
-if ($null -eq $session) { Write-Output '{"title":null}'; exit }
-$media = Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
-$timeline = $session.GetTimelineProperties()
-$playback = $session.GetPlaybackInfo()
-$thumb = $null
+
+$mgr = $null
 try {
-  if ($media.Thumbnail) {
-    [Windows.Storage.Streams.IRandomAccessStreamWithContentType,Windows.Storage.Streams,ContentType=WindowsRuntime] | Out-Null
-    $stream = Await ($media.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
-    $asStream = ([System.IO.WindowsRuntimeStreamExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsStream' -and $_.GetParameters().Count -eq 1 })[0]
-    $netStream = $asStream.Invoke($null, @($stream))
-    $memStream = New-Object System.IO.MemoryStream
-    $netStream.CopyTo($memStream)
-    $bytes = $memStream.ToArray()
-    if ($bytes.Length -gt 0) {
-      $thumb = [Convert]::ToBase64String($bytes)
-    }
-    $memStream.Dispose()
-    $netStream.Dispose()
-    $stream.Dispose()
-  }
-} catch { }
-$result = @{
-  title = $media.Title
-  artist = $media.Artist
-  album = $media.AlbumTitle
-  isPlaying = ($playback.PlaybackStatus -eq 'Playing')
-  position = [math]::Round($timeline.Position.TotalSeconds, 1)
-  duration = [math]::Round($timeline.EndTime.TotalSeconds, 1)
-  thumbnail = $thumb
-} | ConvertTo-Json -Compress
-Write-Output $result
+    $mgr = Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])
+} catch {
+    Write-Output '{"title":null}'
+    exit
+}
+
+$lastTitle = ""
+$lastPlaying = $false
+$lastPos = -1
+
+while ($true) {
+    try {
+        $session = $mgr.GetCurrentSession()
+        if ($null -eq $session) {
+            if ($lastTitle -ne "") {
+                Write-Output '{"title":null}'
+                $lastTitle = ""
+                $lastPlaying = $false
+                $lastPos = -1
+            }
+        } else {
+            $media = Await ($session.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])
+            $timeline = $session.GetTimelineProperties()
+            $playback = $session.GetPlaybackInfo()
+            
+            $curTitle = if ($media.Title) { $media.Title } else { "" }
+            $curArtist = if ($media.Artist) { $media.Artist } else { "" }
+            $curAlbum = if ($media.AlbumTitle) { $media.AlbumTitle } else { "" }
+            $curPlaying = ($playback.PlaybackStatus -eq 'Playing')
+            $curPos = [math]::Round($timeline.Position.TotalSeconds, 1)
+            $curDur = [math]::Round($timeline.EndTime.TotalSeconds, 1)
+
+            $songChanged = ($curTitle -ne $lastTitle)
+            $playChanged = ($curPlaying -ne $lastPlaying)
+            $posMoved = ([math]::Abs($curPos - $lastPos) -ge 1.0)
+
+            if ($songChanged -or $playChanged -or $posMoved) {
+                $thumb = $null
+                # Only extract thumbnail if song actually changed
+                if ($songChanged -and $media.Thumbnail) {
+                    try {
+                        [Windows.Storage.Streams.IRandomAccessStreamWithContentType,Windows.Storage.Streams,ContentType=WindowsRuntime] | Out-Null
+                        $stream = Await ($media.Thumbnail.OpenReadAsync()) ([Windows.Storage.Streams.IRandomAccessStreamWithContentType])
+                        $asStream = ([System.IO.WindowsRuntimeStreamExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsStream' -and $_.GetParameters().Count -eq 1 })[0]
+                        $netStream = $asStream.Invoke($null, @($stream))
+                        $memStream = New-Object System.IO.MemoryStream
+                        $netStream.CopyTo($memStream)
+                        $bytes = $memStream.ToArray()
+                        if ($bytes.Length -gt 0) {
+                            $thumb = [Convert]::ToBase64String($bytes)
+                        }
+                        $memStream.Dispose()
+                        $netStream.Dispose()
+                        $stream.Dispose()
+                    } catch { }
+                }
+
+                $obj = @{
+                    title = $curTitle
+                    artist = $curArtist
+                    album = $curAlbum
+                    isPlaying = $curPlaying
+                    position = $curPos
+                    duration = $curDur
+                    songChanged = $songChanged
+                }
+                if ($songChanged) {
+                    $obj["thumbnail"] = $thumb
+                }
+                $json = $obj | ConvertTo-Json -Compress
+                Write-Output $json
+
+                $lastTitle = $curTitle
+                $lastPlaying = $curPlaying
+                $lastPos = $curPos
+            }
+        }
+    } catch { }
+    Start-Sleep -Milliseconds 800
+}
 `;
 
 class WindowsProvider {
-  runScript(script) {
-    return new Promise((resolve, reject) => {
-      execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], (error, stdout, stderr) => {
-        if (error) {
-          resolve(null);
-        } else {
-          resolve(stdout.trim());
+  constructor() {
+    this.latestMedia = null;
+    this.cachedThumbnail = null;
+    this.child = null;
+    this.onUpdateCallback = null;
+    this.isExiting = false;
+    this.startDaemon();
+  }
+
+  startDaemon() {
+    if (this.isExiting) return;
+
+    try {
+      this.child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', DAEMON_SCRIPT], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore']
+      });
+
+      const rl = readline.createInterface({ input: this.child.stdout });
+
+      rl.on('line', (line) => {
+        try {
+          const raw = line.trim();
+          if (!raw) return;
+          const data = JSON.parse(raw);
+
+          if (!data.title) {
+            this.latestMedia = null;
+            this.cachedThumbnail = null;
+            if (this.onUpdateCallback) this.onUpdateCallback(null);
+            return;
+          }
+
+          // Cache thumbnail on track change
+          if (data.songChanged) {
+            this.cachedThumbnail = data.thumbnail ? 'data:image/png;base64,' + data.thumbnail : null;
+          }
+
+          this.latestMedia = {
+            title: data.title,
+            artist: data.artist || '',
+            album: data.album || '',
+            thumbnailDataUrl: this.cachedThumbnail,
+            position: data.position || 0,
+            duration: data.duration || 0,
+            isPlaying: !!data.isPlaying,
+            songChanged: !!data.songChanged
+          };
+
+          if (this.onUpdateCallback) {
+            this.onUpdateCallback(this.latestMedia);
+          }
+        } catch (e) {
+          // Ignore JSON parse errors
         }
       });
-    });
+
+      this.child.on('exit', () => {
+        this.child = null;
+        if (!this.isExiting) {
+          setTimeout(() => this.startDaemon(), 2500);
+        }
+      });
+    } catch (err) {
+      console.warn('[Orphy] Failed to start Windows media daemon:', err.message);
+    }
+  }
+
+  onUpdate(callback) {
+    this.onUpdateCallback = callback;
   }
 
   async getMediaInfo() {
-    try {
-      const output = await this.runScript(PS_SCRIPT);
-      if (!output) return null;
-      
-      const data = JSON.parse(output);
-      if (!data.title) return null;
-      
-      return {
-        title: data.title,
-        artist: data.artist || '',
-        album: data.album || '',
-        thumbnailDataUrl: data.thumbnail ? 'data:image/png;base64,' + data.thumbnail : null,
-        position: data.position || 0,
-        duration: data.duration || 0,
-        isPlaying: data.isPlaying || false
-      };
-    } catch (e) {
-      return null;
-    }
+    return this.latestMedia;
   }
 
   async control(action, arg) {
@@ -89,8 +181,9 @@ class WindowsProvider {
     else if (action === 'seek' && typeof arg === 'number') {
       const secs = Math.max(0, Math.round(arg));
       method = `TryChangePlaybackPositionAsync([System.TimeSpan]::FromSeconds(${secs}))`;
+    } else {
+      return false;
     }
-    else return false;
 
     const script = [
       'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
@@ -109,8 +202,16 @@ class WindowsProvider {
       '}'
     ].join('\n');
 
-    await this.runScript(script);
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { windowsHide: true }, () => {});
     return true;
+  }
+
+  destroy() {
+    this.isExiting = true;
+    if (this.child) {
+      try { this.child.kill(); } catch (e) {}
+      this.child = null;
+    }
   }
 }
 

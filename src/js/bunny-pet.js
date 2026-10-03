@@ -628,6 +628,18 @@ class BunnyPet {
 
       this.eyeOffsetX = dx > 18 ? 1 : (dx < -18 ? -1 : 0);
       this.eyeOffsetY = dy > 18 ? 1 : (dy < -18 ? -1 : 0);
+
+      // Selective click-through: allow clicking other windows through transparent bounds
+      const bx = this.x;
+      const by = this.y;
+      const bw = 24 * this.pixelSize;
+      const bh = 26 * this.pixelSize;
+      const isOverBunny = (this.mouseCanvasX >= bx - 8 && this.mouseCanvasX <= bx + bw + 8 &&
+                           this.mouseCanvasY >= by - 8 && this.mouseCanvasY <= by + bh + 8);
+
+      if (window.orphy && window.orphy.setBunnyIgnoreMouse) {
+        window.orphy.setBunnyIgnoreMouse(!isOverBunny && !this.isDragging);
+      }
     });
 
     this.canvas.addEventListener('mouseleave', () => {
@@ -635,6 +647,9 @@ class BunnyPet {
       this.mouseCanvasY = null;
       this.eyeOffsetX = 0;
       this.eyeOffsetY = 0;
+      if (!this.isDragging && window.orphy && window.orphy.setBunnyIgnoreMouse) {
+        window.orphy.setBunnyIgnoreMouse(true);
+      }
     });
 
     // Right Click Context Menu
@@ -662,10 +677,22 @@ class BunnyPet {
       this.tiltAngle = 0;
       this.state = 'dangling';
       this.canvas.style.cursor = 'grabbing';
+      if (window.orphy && window.orphy.setBunnyIgnoreMouse) {
+        window.orphy.setBunnyIgnoreMouse(false);
+      }
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (!isMouseDown || !this.isDragging || this.isLocked) return;
+      if (!this.isDragging) return;
+
+      // Robust drag release: if mouse button was released outside the window
+      if (e.buttons === 0) {
+        isMouseDown = false;
+        this.endDrag();
+        return;
+      }
+
+      if (!isMouseDown || this.isLocked) return;
       const dx = e.screenX - initialMouse.x;
       const dy = e.screenY - initialMouse.y;
       
@@ -675,12 +702,9 @@ class BunnyPet {
     });
 
     window.addEventListener('mouseup', () => {
-      if (isMouseDown) {
+      if (isMouseDown || this.isDragging) {
         isMouseDown = false;
-        this.isDragging = false;
-        this.canvas.style.cursor = 'grab';
-        this.triggerHappy();
-        this.spawnHeartBurst();
+        this.endDrag();
       }
     });
 
@@ -696,6 +720,16 @@ class BunnyPet {
         }
       }
     });
+  }
+
+  endDrag() {
+    this.isDragging = false;
+    this.canvas.style.cursor = 'grab';
+    this.triggerHappy();
+    this.spawnHeartBurst();
+    if (window.orphy && window.orphy.setBunnyIgnoreMouse) {
+      window.orphy.setBunnyIgnoreMouse(false);
+    }
   }
 
   setupIPC() {
@@ -718,8 +752,9 @@ class BunnyPet {
         }
       }
 
-      // Dynamic theme color update matching Island
-      if (info && info.thumbnailDataUrl && window.ThemeEngine) {
+      // Dynamic theme color update matching Island (only on song change!)
+      if (info && info.thumbnailDataUrl && window.ThemeEngine && (info.songChanged || !this.hasExtractedTheme)) {
+        this.hasExtractedTheme = true;
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {

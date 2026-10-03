@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('orphy', {
     ipcRenderer.on('lock-changed', (_event, locked) => callback(locked));
   },
   getLockState: () => ipcRenderer.invoke('get-lock-state'),
+  setBunnyIgnoreMouse: (ignore) => ipcRenderer.invoke('set-bunny-ignore-mouse', ignore),
   
   // Close / Hide
   quitApp: () => ipcRenderer.invoke('quit-app')

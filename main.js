@@ -15,8 +15,7 @@ let islandWindow = null;
 let bunnyWindow = null;
 let tray = null;
 let mediaProvider = null;
-let pollInterval = null;
-let isPolling = false;
+let heartbeatInterval = null;
 
 const ISLAND_WIDTH = 432;
 const ISLAND_HEIGHT = 135;
@@ -48,7 +47,7 @@ function loadConfig() {
 let saveTimer = null;
 function saveConfig() {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
+  saveTimer = setTimeout(async () => {
     try {
       if (islandWindow && !islandWindow.isDestroyed()) {
         const [ix, iy] = islandWindow.getPosition();
@@ -60,11 +59,11 @@ function saveConfig() {
         config.bunnyX = bx;
         config.bunnyY = by;
       }
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+      await fs.promises.writeFile(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
     } catch (err) {
       console.warn('[Orphy] Could not save config:', err.message);
     }
-  }, 400);
+  }, 800);
 }
 
 function clampToBounds(x, y, w, h) {
@@ -104,6 +103,7 @@ function createWindows() {
   bY = clampedBunny.y;
 
   // 1. Create Island Window (Music Card)
+  // focusable: false prevents stealing focus from active apps/games/browsers!
   islandWindow = new BrowserWindow({
     title: 'Orphy',
     width: ISLAND_WIDTH,
@@ -113,6 +113,7 @@ function createWindows() {
     transparent: true,
     frame: false,
     alwaysOnTop: config.alwaysOnTop,
+    focusable: false,
     skipTaskbar: false,
     resizable: false,
     hasShadow: false,
@@ -127,6 +128,7 @@ function createWindows() {
   islandWindow.loadFile(path.join(__dirname, 'src', 'island.html'));
 
   // 2. Create Bunny Window (Companion)
+  // focusable: false ensures dragging/clicking never interrupts active windows
   bunnyWindow = new BrowserWindow({
     title: 'Orphy Bunny',
     width: BUNNY_WIDTH,
@@ -136,6 +138,7 @@ function createWindows() {
     transparent: true,
     frame: false,
     alwaysOnTop: config.alwaysOnTop,
+    focusable: false,
     skipTaskbar: true,
     resizable: false,
     hasShadow: false,
@@ -149,39 +152,46 @@ function createWindows() {
 
   bunnyWindow.loadFile(path.join(__dirname, 'src', 'bunny.html'));
 
-  islandWindow.setAlwaysOnTop(config.alwaysOnTop, 'floating');
-  bunnyWindow.setAlwaysOnTop(config.alwaysOnTop, 'floating');
+  // Enable initial mouse forwarding so transparent bounds don't block underlying windows
+  bunnyWindow.setIgnoreMouseEvents(false);
 
-  // Velocity tracking for docked drag-lag physics
+  // Velocity tracking for docked drag-lag physics (throttled)
   let lastMoveTime = performance.now();
   let lastX = startX;
   let lastY = startY;
+  let moveThrottleTimer = null;
   let stopDragTimer = null;
 
   islandWindow.on('move', () => {
-    const now = performance.now();
-    const dt = Math.max(1, now - lastMoveTime);
-    const [ix, iy] = islandWindow.getPosition();
+    if (moveThrottleTimer) return;
+    moveThrottleTimer = setTimeout(() => {
+      moveThrottleTimer = null;
+      if (!islandWindow || islandWindow.isDestroyed()) return;
 
-    const vx = ((ix - lastX) / dt) * 16;
-    const vy = ((iy - lastY) / dt) * 16;
-    lastMoveTime = now;
-    lastX = ix;
-    lastY = iy;
+      const now = performance.now();
+      const dt = Math.max(1, now - lastMoveTime);
+      const [ix, iy] = islandWindow.getPosition();
 
-    if (config.isDocked && bunnyWindow && !bunnyWindow.isDestroyed()) {
-      bunnyWindow.setPosition(ix + ISLAND_WIDTH + 4, iy - 10);
-      bunnyWindow.webContents.send('island-drag-lag', { vx, vy });
+      const vx = ((ix - lastX) / dt) * 16;
+      const vy = ((iy - lastY) / dt) * 16;
+      lastMoveTime = now;
+      lastX = ix;
+      lastY = iy;
 
-      if (stopDragTimer) clearTimeout(stopDragTimer);
-      stopDragTimer = setTimeout(() => {
-        if (bunnyWindow && !bunnyWindow.isDestroyed()) {
-          bunnyWindow.webContents.send('island-drag-lag', { vx: 0, vy: 0 });
-        }
-      }, 100);
-    }
+      if (config.isDocked && bunnyWindow && !bunnyWindow.isDestroyed()) {
+        bunnyWindow.setPosition(ix + ISLAND_WIDTH + 4, iy - 10);
+        bunnyWindow.webContents.send('island-drag-lag', { vx, vy });
 
-    saveConfig();
+        if (stopDragTimer) clearTimeout(stopDragTimer);
+        stopDragTimer = setTimeout(() => {
+          if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+            bunnyWindow.webContents.send('island-drag-lag', { vx: 0, vy: 0 });
+          }
+        }, 120);
+      }
+
+      saveConfig();
+    }, 16);
   });
 
   islandWindow.on('closed', () => {
@@ -244,6 +254,15 @@ function createTray() {
     });
   } catch (err) {
     console.warn('[Orphy] Tray creation skipped:', err.message);
+  }
+}
+
+function broadcastMedia(info) {
+  if (islandWindow && !islandWindow.isDestroyed()) {
+    islandWindow.webContents.send('media-update', info);
+  }
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.webContents.send('media-update', info);
   }
 }
 
@@ -310,37 +329,30 @@ function toggleAlwaysOnTop(val) {
   config.alwaysOnTop = val;
   saveConfig();
   if (islandWindow && !islandWindow.isDestroyed()) {
-    islandWindow.setAlwaysOnTop(val, 'floating');
+    islandWindow.setAlwaysOnTop(val);
   }
   if (bunnyWindow && !bunnyWindow.isDestroyed()) {
-    bunnyWindow.setAlwaysOnTop(val, 'floating');
+    bunnyWindow.setAlwaysOnTop(val);
   }
 }
 
-function startPolling() {
-  if (pollInterval) clearInterval(pollInterval);
-  
-  const poll = async () => {
-    if (isPolling) return;
-    isPolling = true;
+function setupMediaMonitoring() {
+  mediaProvider = MediaProvider.create();
+
+  // Instant event-driven updates from persistent daemon
+  if (mediaProvider.onUpdate) {
+    mediaProvider.onUpdate((info) => {
+      broadcastMedia(info);
+    });
+  }
+
+  // Low frequency heartbeat (every 5 seconds) to ensure sync
+  heartbeatInterval = setInterval(async () => {
     try {
       const info = await mediaProvider.getMediaInfo();
-      // Broadcast to both Island and Bunny
-      if (islandWindow && !islandWindow.isDestroyed()) {
-        islandWindow.webContents.send('media-update', info);
-      }
-      if (bunnyWindow && !bunnyWindow.isDestroyed()) {
-        bunnyWindow.webContents.send('media-update', info);
-      }
-    } catch (e) {
-      // Ignore polling errors
-    } finally {
-      isPolling = false;
-    }
-  };
-
-  poll();
-  pollInterval = setInterval(poll, 1800);
+      broadcastMedia(info);
+    } catch (e) {}
+  }, 5000);
 }
 
 // ==========================================
@@ -358,19 +370,13 @@ ipcMain.handle('media-control', async (_event, action, arg) => {
   try {
     await mediaProvider.control(action, arg);
     const info = await mediaProvider.getMediaInfo();
-    if (islandWindow && !islandWindow.isDestroyed()) {
-      islandWindow.webContents.send('media-update', info);
-    }
-    if (bunnyWindow && !bunnyWindow.isDestroyed()) {
-      bunnyWindow.webContents.send('media-update', info);
-    }
+    broadcastMedia(info);
     return true;
   } catch (e) {
     return false;
   }
 });
 
-// Recall triggered from Island button
 ipcMain.handle('recall-bunny', () => {
   triggerRecall();
   return true;
@@ -420,6 +426,14 @@ ipcMain.handle('feed-carrot', () => {
 
 ipcMain.handle('get-lock-state', () => {
   return config.isLocked;
+});
+
+// Selective click-through for transparent companion bounds
+ipcMain.handle('set-bunny-ignore-mouse', (_event, ignore) => {
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.setIgnoreMouseEvents(ignore, { forward: true });
+  }
+  return true;
 });
 
 // Context Menus
@@ -480,10 +494,9 @@ ipcMain.handle('quit-app', () => {
 
 // App Lifecycle
 app.whenReady().then(() => {
-  mediaProvider = MediaProvider.create();
+  setupMediaMonitoring();
   createWindows();
   createTray();
-  startPolling();
 
   // Register Global Shortcut: Ctrl+Shift+B summons bunny to cursor
   try {
@@ -501,12 +514,12 @@ app.whenReady().then(() => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  if (mediaProvider && mediaProvider.destroy) {
+    mediaProvider.destroy();
+  }
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-});
-
-app.on('before-quit', () => {
-  if (pollInterval) clearInterval(pollInterval);
 });

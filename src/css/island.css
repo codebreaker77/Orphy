@@ -353,20 +353,7 @@ html, body {
     transparent 3px
   );
   height: 2px;
-  transition: height 0.12s ease;
 }
-
-.eq-bar.active.bar-1 { animation: eqBounce1 0.42s infinite alternate ease-in-out; }
-.eq-bar.active.bar-2 { animation: eqBounce2 0.35s infinite alternate ease-in-out 0.07s; }
-.eq-bar.active.bar-3 { animation: eqBounce3 0.50s infinite alternate ease-in-out 0.14s; }
-.eq-bar.active.bar-4 { animation: eqBounce4 0.38s infinite alternate ease-in-out 0.03s; }
-.eq-bar.active.bar-5 { animation: eqBounce5 0.45s infinite alternate ease-in-out 0.10s; }
-
-@keyframes eqBounce1 { 0% { height: 2px; } 100% { height: 11px; } }
-@keyframes eqBounce2 { 0% { height: 3px; } 100% { height: 13px; } }
-@keyframes eqBounce3 { 0% { height: 2px; } 100% { height: 10px; } }
-@keyframes eqBounce4 { 0% { height: 4px; } 100% { height: 12px; } }
-@keyframes eqBounce5 { 0% { height: 2px; } 100% { height: 9px; } }
 
 #ctrl-group {
   display: flex;

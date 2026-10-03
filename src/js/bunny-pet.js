@@ -44,6 +44,12 @@ class BunnyPet {
     // Interactive Snack Feeding (Carrot)
     this.fallingCarrot = null;
 
+    // EQ Heartbeat & Drop Reactive Physics
+    this.eqEnergy = 0;
+    this.eqBass = 0;
+    this.beatJumpY = 0;
+    this.trackDropY = 0;
+
     // Reactive Eye Tracking
     this.mouseCanvasX = null;
     this.mouseCanvasY = null;
@@ -720,7 +726,34 @@ class BunnyPet {
         };
         img.src = info.thumbnailDataUrl;
       }
+
+      // Track change celebratory drop-in
+      if (info && info.songChanged) {
+        this.triggerTrackDrop();
+      }
     });
+
+    // Listen to EQ Energy & Beat Drop Heartbeat from Island
+    if (window.orphy.onEqEnergy) {
+      window.orphy.onEqEnergy((data) => {
+        this.eqEnergy = data.energy || 0;
+        this.eqBass = data.bass || 0;
+
+        if (data.isBeatDrop && this.state !== 'jetpack' && this.state !== 'dangling') {
+          this.triggerBeatDropJump();
+        }
+      });
+    }
+
+    // Island Cursor Hover Tracking (Mascot looks up towards cursor)
+    if (window.orphy.onIslandHover) {
+      window.orphy.onIslandHover((data) => {
+        if (this.isDragging || this.recallActive) return;
+        this.eyeOffsetX = data.x < 220 ? -1 : 1;
+        this.eyeOffsetY = -1; // Look up towards player deck
+        this.targetLagAngle = (data.x - 220) * 0.0003;
+      });
+    }
 
     window.orphy.onStartRecall((data) => {
       this.startCurvyJetpackFlight(data);
@@ -909,6 +942,17 @@ class BunnyPet {
     this.state = 'wake_up';
     this.wakeUpTimer = 750;
     this.frame = 0;
+  }
+
+  triggerBeatDropJump() {
+    this.beatJumpY = -12;
+    this.spawnMusicalNotes();
+  }
+
+  triggerTrackDrop() {
+    this.trackDropY = -35;
+    this.triggerHappy();
+    this.spawnHeartBurst();
   }
 
   // ========================================================
@@ -1169,6 +1213,12 @@ class BunnyPet {
       }
     }
 
+    // Smooth return for beat drop jump and track drop fall
+    this.beatJumpY += (0 - this.beatJumpY) * 0.22;
+    if (this.trackDropY < 0) {
+      this.trackDropY = Math.min(0, this.trackDropY + dt * 0.12);
+    }
+
     // Smooth Docked Lag Angle Recovery
     this.dockedLagAngle += (this.targetLagAngle - this.dockedLagAngle) * 0.18;
 
@@ -1229,18 +1279,21 @@ class BunnyPet {
     const frames = this.getCurrentSpriteFrames();
     const sprite = frames[this.frame % frames.length];
 
-    let renderY = this.y;
+    let renderY = this.y + this.beatJumpY + this.trackDropY;
     let hopOffset = 0;
+
+    // Modulate hop amplitude directly with live EQ bass amplitude
+    const eqMultiplier = 0.7 + (this.eqBass || 0.3) * 0.8;
 
     if (this.state === 'idle') {
       renderY += Math.sin(this.bouncePhase) * 2;
     } else if (this.state === 'dancing') {
       if (this.genreVibe === 'rock' && (this.frame === 1 || this.frame === 3)) {
-        hopOffset = 4; // Headbang dip down!
+        hopOffset = 4 * eqMultiplier; // Headbang dip down!
       } else if (this.genreVibe === 'chill') {
-        renderY += Math.sin(this.bouncePhase) * 2; // Soft sway
+        renderY += Math.sin(this.bouncePhase) * 2.5; // Soft sway
       } else if (this.frame === 1 || this.frame === 3) {
-        hopOffset = -7;
+        hopOffset = -7 * eqMultiplier;
       }
     } else if (this.state === 'happy') {
       hopOffset = -10;

@@ -91,12 +91,12 @@ function createWindows() {
   startX = clampedIsland.x;
   startY = clampedIsland.y;
 
-  // Determine starting Bunny coordinates
-  let bX = config.bunnyX != null ? config.bunnyX : startX + ISLAND_WIDTH + 4;
-  let bY = config.bunnyY != null ? config.bunnyY : startY - 10;
+  // Determine starting Bunny coordinates (mascot lives right below the player)
+  let bX = config.bunnyX != null ? config.bunnyX : startX + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2);
+  let bY = config.bunnyY != null ? config.bunnyY : startY + ISLAND_HEIGHT - 22;
   if (config.isDocked) {
-    bX = startX + ISLAND_WIDTH + 4;
-    bY = startY - 10;
+    bX = startX + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2);
+    bY = startY + ISLAND_HEIGHT - 22;
   }
   const clampedBunny = clampToBounds(bX, bY, BUNNY_WIDTH, BUNNY_HEIGHT);
   bX = clampedBunny.x;
@@ -179,7 +179,8 @@ function createWindows() {
       lastY = iy;
 
       if (config.isDocked && bunnyWindow && !bunnyWindow.isDestroyed()) {
-        bunnyWindow.setPosition(ix + ISLAND_WIDTH + 4, iy - 10);
+        const dockPos = getDockedBunnyPosition();
+        bunnyWindow.setPosition(dockPos.x, dockPos.y);
         bunnyWindow.webContents.send('island-drag-lag', { vx, vy });
 
         if (stopDragTimer) clearTimeout(stopDragTimer);
@@ -266,14 +267,23 @@ function broadcastMedia(info) {
   }
 }
 
+function getDockedBunnyPosition() {
+  if (!islandWindow || islandWindow.isDestroyed()) return { x: 0, y: 0 };
+  const [ix, iy] = islandWindow.getPosition();
+  return {
+    x: ix + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2),
+    y: iy + ISLAND_HEIGHT - 22
+  };
+}
+
 function triggerRecall() {
   if (!islandWindow || !bunnyWindow || bunnyWindow.isDestroyed()) return;
-  const [ix, iy] = islandWindow.getPosition();
+  const dockPos = getDockedBunnyPosition();
   const primaryDisplay = screen.getPrimaryDisplay();
   
   const recallData = {
-    targetX: ix + ISLAND_WIDTH + 4,
-    targetY: iy - 10,
+    targetX: dockPos.x,
+    targetY: dockPos.y,
     screenBounds: primaryDisplay.workArea,
     dockOnArrival: true
   };
@@ -438,6 +448,31 @@ ipcMain.handle('set-bunny-ignore-mouse', (_event, ignore) => {
     bunnyWindow.setIgnoreMouseEvents(ignore, { forward: true });
   }
   return true;
+});
+
+// Dynamic Island & Mascot Physical Coordination
+ipcMain.on('eq-energy', (_event, data) => {
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.webContents.send('eq-energy', data);
+  }
+});
+
+ipcMain.on('island-hover', (_event, data) => {
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.webContents.send('island-hover', data);
+  }
+});
+
+ipcMain.on('island-mode', (_event, mode) => {
+  if (bunnyWindow && !bunnyWindow.isDestroyed()) {
+    bunnyWindow.webContents.send('island-mode', mode);
+    if (config.isDocked && islandWindow && !islandWindow.isDestroyed()) {
+      const [ix, iy] = islandWindow.getPosition();
+      const dockY = (mode === 'collapsed') ? (iy + 38 - 18) : (iy + ISLAND_HEIGHT - 22);
+      const dockX = ix + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2);
+      bunnyWindow.setPosition(dockX, dockY);
+    }
+  }
 });
 
 // Context Menus

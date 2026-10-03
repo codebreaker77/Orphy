@@ -2,9 +2,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const islandContainer = document.getElementById('island-container');
   const albumCanvas = document.getElementById('album-canvas');
   const albumCtx = albumCanvas ? albumCanvas.getContext('2d') : null;
+  const miniArtCanvas = document.getElementById('mini-art-canvas');
+  const miniArtCtx = miniArtCanvas ? miniArtCanvas.getContext('2d') : null;
   const noArt = document.getElementById('no-art');
+
   const songTitle = document.getElementById('song-title');
   const songArtist = document.getElementById('song-artist');
+  const miniSongTitle = document.getElementById('mini-song-title');
   const vibeBadge = document.getElementById('vibe-badge');
   const timeCurrent = document.getElementById('time-current');
   const timeTotal = document.getElementById('time-total');
@@ -13,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressFill = document.getElementById('progress-fill');
   const scrubTooltip = document.getElementById('scrub-tooltip');
   
+  // Controls
   const btnPrev = document.getElementById('btn-prev');
   const btnToggle = document.getElementById('btn-toggle');
   const btnNext = document.getElementById('btn-next');
@@ -21,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRepeat = document.getElementById('btn-repeat');
   const btnRecall = document.getElementById('btn-recall');
   const btnCarrot = document.getElementById('btn-carrot');
+  const btnCollapse = document.getElementById('btn-collapse');
+  const miniBtnToggle = document.getElementById('mini-btn-toggle');
+  const miniBtnExpand = document.getElementById('mini-btn-expand');
 
   const iconPause = document.getElementById('icon-pause');
   const iconPlay = document.getElementById('icon-play');
@@ -33,7 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentTitle = '';
   let currentDuration = 0;
-  let currentPosition = 0;
   let isMusicPlaying = false;
   let currentGenre = 'standard';
   let hasRenderedThumbnail = false;
@@ -41,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let toastTimeout = null;
   let volToastTimeout = null;
   let simulatedVol = 100;
+  let islandMode = 'expanded'; // 'expanded' or 'collapsed'
 
   // 16-Band Spectrum Analyzer State (Pure JS, zero layout reflows!)
   const barHeights = new Float32Array(numBands).fill(2);
@@ -49,6 +57,60 @@ document.addEventListener('DOMContentLoaded', () => {
   const peakHoldTimers = new Float32Array(numBands).fill(0);
   let spectrumPhase = 0;
   let lastPeakTime = performance.now();
+  let lastEqSendTime = 0;
+
+  // ========================================================
+  // DYNAMIC ISLAND 3-STATE MORPHING
+  // ========================================================
+  function setIslandMode(mode) {
+    islandMode = mode;
+    if (mode === 'collapsed') {
+      islandContainer.classList.remove('state-expanded');
+      islandContainer.classList.add('state-collapsed');
+    } else {
+      islandContainer.classList.remove('state-collapsed');
+      islandContainer.classList.add('state-expanded');
+    }
+    if (window.orphy && window.orphy.sendIslandMode) {
+      window.orphy.sendIslandMode(mode);
+    }
+  }
+
+  if (btnCollapse) {
+    btnCollapse.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setIslandMode('collapsed');
+    });
+  }
+
+  if (miniBtnExpand) {
+    miniBtnExpand.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setIslandMode('expanded');
+    });
+  }
+
+  islandContainer.addEventListener('click', (e) => {
+    // If in collapsed mode and user clicks the pill, expand it
+    if (islandMode === 'collapsed') {
+      const target = e.target;
+      if (target !== miniBtnToggle && !target.closest('#mini-btn-toggle')) {
+        setIslandMode('expanded');
+      }
+    }
+  });
+
+  // Double click to toggle expand/collapse
+  islandContainer.addEventListener('dblclick', () => {
+    setIslandMode(islandMode === 'expanded' ? 'collapsed' : 'expanded');
+  });
+
+  // Cursor Hover Sync to Mascot
+  islandContainer.addEventListener('mousemove', (e) => {
+    if (window.orphy && window.orphy.sendIslandHover) {
+      window.orphy.sendIslandHover({ x: e.clientX, y: e.clientY });
+    }
+  });
 
   // Right Click Context Menu
   window.addEventListener('contextmenu', (e) => {
@@ -98,7 +160,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function commitSeek(ratio) {
     if (currentDuration <= 0) return;
     const targetSec = Math.round(ratio * currentDuration);
-    currentPosition = targetSec;
     timeCurrent.textContent = formatTime(targetSec);
     progressFill.style.width = `${(ratio * 100).toFixed(1)}%`;
 
@@ -109,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (progressBarWrap) {
     progressBarWrap.addEventListener('mousedown', (e) => {
-      if (e.button !== 0) return; // Primary left button only
+      if (e.button !== 0) return;
       if (currentDuration <= 0) return;
       isScrubbing = true;
       scrubRatio = calculateRatio(e);
@@ -193,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Playback control buttons
   if (btnPrev) btnPrev.addEventListener('click', () => window.orphy?.mediaControl('prev'));
   if (btnToggle) btnToggle.addEventListener('click', () => window.orphy?.mediaControl('toggle'));
+  if (miniBtnToggle) miniBtnToggle.addEventListener('click', () => window.orphy?.mediaControl('toggle'));
   if (btnNext) btnNext.addEventListener('click', () => window.orphy?.mediaControl('next'));
   if (btnShuffle) btnShuffle.addEventListener('click', () => {
     btnShuffle.classList.toggle('active');
@@ -240,9 +302,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!info || !info.title) {
       songTitle.textContent = 'WAITING FOR MUSIC...';
       songArtist.textContent = 'PLAY SOMETHING!';
+      if (miniSongTitle) miniSongTitle.textContent = 'WAITING...';
       if (vibeBadge) vibeBadge.textContent = '♪ HI-FI';
       if (noArt) noArt.classList.remove('hidden');
       if (albumCtx) albumCtx.clearRect(0, 0, albumCanvas.width, albumCanvas.height);
+      if (miniArtCtx) miniArtCtx.clearRect(0, 0, miniArtCanvas.width, miniArtCanvas.height);
       timeCurrent.textContent = '0:00';
       timeTotal.textContent = '0:00';
       progressFill.style.width = '0%';
@@ -250,7 +314,6 @@ document.addEventListener('DOMContentLoaded', () => {
       isMusicPlaying = false;
       currentTitle = '';
       currentDuration = 0;
-      currentPosition = 0;
       hasRenderedThumbnail = false;
       lastThumbnailUrl = null;
       return;
@@ -259,11 +322,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const songChanged = currentTitle !== info.title;
     currentTitle = info.title;
     currentDuration = info.duration || 0;
-    currentPosition = info.position || 0;
     isMusicPlaying = !!info.isPlaying;
 
     songTitle.textContent = (info.title || 'UNKNOWN').toUpperCase();
     songArtist.textContent = (info.artist || 'UNKNOWN ARTIST').toUpperCase();
+    if (miniSongTitle) miniSongTitle.textContent = (info.title || 'UNKNOWN').toUpperCase();
 
     updateGenreDisplay(info);
 
@@ -271,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showTrackToast(info.title.toUpperCase());
     }
 
-    // Album art thumbnail
+    // Physical Cassette Art thumbnail
     if (info.thumbnailDataUrl) {
       if (songChanged || !hasRenderedThumbnail || lastThumbnailUrl !== info.thumbnailDataUrl) {
         lastThumbnailUrl = info.thumbnailDataUrl;
@@ -282,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       if (noArt) noArt.classList.remove('hidden');
       if (albumCtx) albumCtx.clearRect(0, 0, albumCanvas.width, albumCanvas.height);
+      if (miniArtCtx) miniArtCtx.clearRect(0, 0, miniArtCanvas.width, miniArtCanvas.height);
       hasRenderedThumbnail = false;
       lastThumbnailUrl = null;
     }
@@ -301,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // ========================================================
   // 16-BAND SPECTRUM ANALYZER ENGINE (60FPS, Zero Layout Reads)
+  // Heartbeat between song -> UI -> mascot!
   // ========================================================
   function updateSpectrumPeaks(time) {
     const dt = Math.min(0.05, (time - lastPeakTime) / 1000);
@@ -309,61 +374,55 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxH = 15; // Max height in pixels
 
     if (isMusicPlaying) {
-      // Speed up or slow down phase depending on music vibe
       const phaseSpeed = (currentGenre === 'energetic') ? 14 : (currentGenre === 'rock' ? 12 : (currentGenre === 'chill' ? 5 : 8));
       spectrumPhase += dt * phaseSpeed;
 
-      // Genre multipliers
       const bassBoost = (currentGenre === 'rock' || currentGenre === 'groove') ? 1.4 : 1.0;
       const midBoost = (currentGenre === 'groove' || currentGenre === 'energetic') ? 1.3 : 1.0;
       const trebleBoost = (currentGenre === 'energetic' || currentGenre === 'rock') ? 1.3 : 0.8;
 
       for (let i = 0; i < numBands; i++) {
-        const norm = i / (numBands - 1); // 0.0 (sub bass) to 1.0 (air treble)
-        
+        const norm = i / (numBands - 1);
         let target = 3;
         if (norm < 0.25) {
-          // Low / Bass channels (0-3)
           target = 4 + (Math.sin(spectrumPhase * 1.5 + i * 0.8) * 5 + Math.cos(spectrumPhase * 2.8) * 4) * bassBoost;
         } else if (norm < 0.65) {
-          // Mid channels (4-10)
           target = 3.5 + (Math.sin(spectrumPhase * 2.2 + i * 0.6) * 4.5 + Math.cos(spectrumPhase * 3.7 + i) * 3.5) * midBoost;
         } else {
-          // Treble channels (11-15)
           target = 2.5 + (Math.sin(spectrumPhase * 3.4 + i * 1.1) * 3.5 + Math.cos(spectrumPhase * 5.1) * 3.0) * trebleBoost;
         }
 
-        // Add periodic rhythmic kick
+        // Periodic rhythmic kick
         const kickPulse = Math.pow(Math.max(0, Math.sin(spectrumPhase * 1.8)), 3) * (5 * (1 - norm * 0.5));
         target += kickPulse;
-
         targetHeights[i] = target;
       }
     } else {
-      // Resting idle state
       for (let i = 0; i < numBands; i++) {
         targetHeights[i] = 2;
       }
     }
 
     // Smooth lerp & peak decay
+    let sumHeight = 0;
     for (let i = 0; i < numBands; i++) {
       const clampedTarget = Math.max(2, Math.min(maxH, targetHeights[i]));
       barHeights[i] += (clampedTarget - barHeights[i]) * 0.32;
+      sumHeight += barHeights[i];
 
       const curH = barHeights[i];
       const bar = eqBars[i];
       if (bar) bar.style.height = `${Math.round(curH)}px`;
 
-      // Floating Peak Hold Physics
+      // Floating Peak Hold
       if (curH >= peakPositions[i]) {
         peakPositions[i] = curH;
-        peakHoldTimers[i] = 0.26; // Hold at apex for 260ms
+        peakHoldTimers[i] = 0.26;
       } else {
         if (peakHoldTimers[i] > 0) {
           peakHoldTimers[i] -= dt;
         } else {
-          peakPositions[i] = Math.max(0, peakPositions[i] - 18 * dt); // Gravity fall
+          peakPositions[i] = Math.max(0, peakPositions[i] - 18 * dt);
         }
       }
 
@@ -374,35 +433,60 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // Heartbeat: Calculate EQ energy & detect beat drops for Mascot & Island pulse!
+    const bassEnergy = (barHeights[0] + barHeights[1] + barHeights[2] + barHeights[3]) / 4;
+    const isBeatDrop = isMusicPlaying && (barHeights[0] > 12.5 || (barHeights[1] > 12.5 && barHeights[0] > 10));
+
+    // Tactile bump on beat drop
+    if (isBeatDrop && !islandContainer.classList.contains('beat-pulse')) {
+      islandContainer.classList.add('beat-pulse');
+      setTimeout(() => islandContainer.classList.remove('beat-pulse'), 140);
+    }
+
+    // Send EQ energy heartbeat packet to Mascot (~50ms throttled)
+    if (time - lastEqSendTime > 50) {
+      lastEqSendTime = time;
+      if (window.orphy && window.orphy.sendEqEnergy) {
+        window.orphy.sendEqEnergy({
+          energy: sumHeight / (numBands * maxH), // normalized 0.0 - 1.0
+          bass: bassEnergy / maxH,
+          isBeatDrop,
+          genre: currentGenre,
+          isPlaying: isMusicPlaying
+        });
+      }
+    }
+
     requestAnimationFrame(updateSpectrumPeaks);
   }
   requestAnimationFrame(updateSpectrumPeaks);
 
   // ========================================================
-  // PIXEL ALBUM ART QUANTIZATION & COLOR EXTRACTION
+  // PHYSICAL CASSETTE PIXEL QUANTIZATION
   // ========================================================
   function renderPixelAlbumArt(dataUrl) {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      if (!albumCanvas || !albumCtx) return;
-      const w = albumCanvas.width;
-      const h = albumCanvas.height;
+      // 1. Render to main cassette window (32x32 chunky nearest-neighbor)
+      if (albumCanvas && albumCtx) {
+        albumCtx.imageSmoothingEnabled = false;
+        const offscreen = document.createElement('canvas');
+        offscreen.width = 32;
+        offscreen.height = 32;
+        const offCtx = offscreen.getContext('2d');
+        offCtx.imageSmoothingEnabled = true;
+        offCtx.drawImage(img, 0, 0, 32, 32);
 
-      albumCtx.imageSmoothingEnabled = false;
+        albumCtx.clearRect(0, 0, albumCanvas.width, albumCanvas.height);
+        albumCtx.drawImage(offscreen, 0, 0, 32, 32, 0, 0, albumCanvas.width, albumCanvas.height);
+      }
 
-      // 36x36 chunky pixel quantization
-      const pixelRes = 36;
-      const offscreen = document.createElement('canvas');
-      offscreen.width = pixelRes;
-      offscreen.height = pixelRes;
-      const offCtx = offscreen.getContext('2d');
-      offCtx.imageSmoothingEnabled = true;
-      offCtx.drawImage(img, 0, 0, pixelRes, pixelRes);
-
-      // Blow up with nearest-neighbor crisp pixels
-      albumCtx.clearRect(0, 0, w, h);
-      albumCtx.drawImage(offscreen, 0, 0, pixelRes, pixelRes, 0, 0, w, h);
+      // 2. Render to mini collapsed capsule icon (16x16)
+      if (miniArtCanvas && miniArtCtx) {
+        miniArtCtx.imageSmoothingEnabled = false;
+        miniArtCtx.drawImage(img, 0, 0, miniArtCanvas.width, miniArtCanvas.height);
+      }
 
       if (noArt) noArt.classList.add('hidden');
     };
@@ -426,9 +510,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isPlaying) {
         iconPause.style.display = 'block';
         iconPlay.style.display = 'none';
+        if (miniBtnToggle) miniBtnToggle.textContent = '⏸';
       } else {
         iconPause.style.display = 'none';
         iconPlay.style.display = 'block';
+        if (miniBtnToggle) miniBtnToggle.textContent = '⏵';
       }
     }
   }

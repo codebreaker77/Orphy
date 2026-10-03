@@ -36,6 +36,20 @@ contextBridge.exposeInMainWorld('orphy', {
   getLockState: () => ipcRenderer.invoke('get-lock-state'),
   setBunnyIgnoreMouse: (ignore) => ipcRenderer.invoke('set-bunny-ignore-mouse', ignore),
   
+  // Dynamic Island & Mascot Physical Coordination
+  sendEqEnergy: (data) => ipcRenderer.send('eq-energy', data),
+  onEqEnergy: (callback) => {
+    ipcRenderer.on('eq-energy', (_event, data) => callback(data));
+  },
+  sendIslandHover: (data) => ipcRenderer.send('island-hover', data),
+  onIslandHover: (callback) => {
+    ipcRenderer.on('island-hover', (_event, data) => callback(data));
+  },
+  sendIslandMode: (mode) => ipcRenderer.send('island-mode', mode),
+  onIslandMode: (callback) => {
+    ipcRenderer.on('island-mode', (_event, mode) => callback(mode));
+  },
+
   // Close / Hide
   quitApp: () => ipcRenderer.invoke('quit-app')
 });

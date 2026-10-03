@@ -8,6 +8,8 @@ const userDataDir = path.join(app.getPath('temp'), 'orphy-cache');
 app.setPath('userData', userDataDir);
 app.commandLine.appendSwitch('disable-gpu-sandbox');
 app.commandLine.appendSwitch('no-sandbox');
+app.commandLine.appendSwitch('disable-http-cache');
+app.commandLine.appendSwitch('disable-gpu-shader-disk-cache');
 
 const CONFIG_PATH = path.join(userDataDir, 'config.json');
 
@@ -38,6 +40,11 @@ function loadConfig() {
     if (fs.existsSync(CONFIG_PATH)) {
       const data = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
       config = { ...config, ...data };
+      // If docked, ignore saved absolute bunny positions to prevent old/offscreen coordinates
+      if (config.isDocked) {
+        config.bunnyX = null;
+        config.bunnyY = null;
+      }
     }
   } catch (err) {
     console.warn('[Orphy] Could not load config, using defaults:', err.message);
@@ -80,7 +87,7 @@ function createWindows() {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenW, height: screenH } = primaryDisplay.workAreaSize;
 
-  const defaultTotalW = ISLAND_WIDTH + BUNNY_WIDTH + 8;
+  const defaultTotalW = ISLAND_WIDTH + BUNNY_WIDTH + 14;
   const defaultStartX = Math.max(20, Math.round((screenW - defaultTotalW) / 2));
   const defaultStartY = 50;
 
@@ -91,12 +98,12 @@ function createWindows() {
   startX = clampedIsland.x;
   startY = clampedIsland.y;
 
-  // Determine starting Bunny coordinates (mascot lives right below the player)
-  let bX = config.bunnyX != null ? config.bunnyX : startX + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2);
-  let bY = config.bunnyY != null ? config.bunnyY : startY + ISLAND_HEIGHT - 22;
+  // Determine starting Bunny coordinates (mascot docks beside the island on the right)
+  let bX = config.bunnyX != null ? config.bunnyX : startX + ISLAND_WIDTH + 6;
+  let bY = config.bunnyY != null ? config.bunnyY : startY + 4;
   if (config.isDocked) {
-    bX = startX + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2);
-    bY = startY + ISLAND_HEIGHT - 22;
+    bX = startX + ISLAND_WIDTH + 6;
+    bY = startY + 4;
   }
   const clampedBunny = clampToBounds(bX, bY, BUNNY_WIDTH, BUNNY_HEIGHT);
   bX = clampedBunny.x;
@@ -151,6 +158,9 @@ function createWindows() {
   });
 
   bunnyWindow.loadFile(path.join(__dirname, 'src', 'bunny.html'));
+  bunnyWindow.show();
+  bunnyWindow.setAlwaysOnTop(config.alwaysOnTop, 'screen-saver', 1);
+  bunnyWindow.moveTop();
 
   // Enable initial mouse forwarding so transparent bounds don't block underlying windows
   bunnyWindow.setIgnoreMouseEvents(false);
@@ -267,12 +277,13 @@ function broadcastMedia(info) {
   }
 }
 
-function getDockedBunnyPosition() {
+function getDockedBunnyPosition(mode = 'expanded') {
   if (!islandWindow || islandWindow.isDestroyed()) return { x: 0, y: 0 };
   const [ix, iy] = islandWindow.getPosition();
+  const currentIslandW = (mode === 'collapsed') ? 240 : ISLAND_WIDTH;
   return {
-    x: ix + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2),
-    y: iy + ISLAND_HEIGHT - 22
+    x: ix + currentIslandW + 6,
+    y: iy + 4
   };
 }
 
@@ -342,7 +353,8 @@ function toggleAlwaysOnTop(val) {
     islandWindow.setAlwaysOnTop(val);
   }
   if (bunnyWindow && !bunnyWindow.isDestroyed()) {
-    bunnyWindow.setAlwaysOnTop(val);
+    bunnyWindow.setAlwaysOnTop(val, 'screen-saver', 1);
+    bunnyWindow.moveTop();
   }
 }
 
@@ -467,10 +479,8 @@ ipcMain.on('island-mode', (_event, mode) => {
   if (bunnyWindow && !bunnyWindow.isDestroyed()) {
     bunnyWindow.webContents.send('island-mode', mode);
     if (config.isDocked && islandWindow && !islandWindow.isDestroyed()) {
-      const [ix, iy] = islandWindow.getPosition();
-      const dockY = (mode === 'collapsed') ? (iy + 38 - 18) : (iy + ISLAND_HEIGHT - 22);
-      const dockX = ix + Math.round((ISLAND_WIDTH - BUNNY_WIDTH) / 2);
-      bunnyWindow.setPosition(dockX, dockY);
+      const dockPos = getDockedBunnyPosition(mode);
+      bunnyWindow.setPosition(dockPos.x, dockPos.y);
     }
   }
 });

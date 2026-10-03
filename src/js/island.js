@@ -97,6 +97,20 @@ document.addEventListener('DOMContentLoaded', () => {
     showVolumeToast(`VOL: ${simulatedVol}%`);
   }, { passive: false });
 
+  const btnCarrot = document.getElementById('btn-carrot');
+
+  // Carrot button handler
+  if (btnCarrot) {
+    btnCarrot.addEventListener('click', () => {
+      btnCarrot.style.transform = 'scale(0.82)';
+      setTimeout(() => { btnCarrot.style.transform = ''; }, 150);
+      if (window.orphy && window.orphy.feedCarrot) {
+        window.orphy.feedCarrot();
+      }
+      showTrackToast('🥕 CRUNCH TIME!');
+    });
+  }
+
   // Recall button handler
   if (btnRecall) {
     btnRecall.addEventListener('click', () => {
@@ -167,7 +181,16 @@ document.addEventListener('DOMContentLoaded', () => {
     songArtist.textContent = (info.artist || 'UNKNOWN ARTIST').toUpperCase();
 
     if (songChanged) {
-      showTrackToast(info.title);
+      const vibe = window.GenreDetector ? window.GenreDetector.detect(info) : 'standard';
+      const vibeIcons = {
+        rock: '⚡ ROCK',
+        chill: '☕ CHILL',
+        groove: '🎧 GROOVE',
+        energetic: '★ RAVE',
+        standard: '♪ POP'
+      };
+      const label = vibeIcons[vibe] || '♪ MUSIC';
+      showTrackToast(`${info.title.slice(0, 18)} [${label}]`);
     }
 
     // Render Pixelated Album Cover ONLY when image changes!

@@ -52,6 +52,23 @@ Orphy operates using a multi-window architecture designed for low overhead and s
 
 ## Installation and Setup
 
+### Method 1: Standalone Windows Executable (Recommended for End Users)
+No Node.js, Git, or terminal is required.
+
+1. Download the latest `Orphy-Setup-1.0.0.exe` (Installer) or `Orphy-Portable-1.0.0.exe` (Standalone) from GitHub Releases.
+2. Run the executable.
+   * The installer creates Start Menu and Desktop shortcuts.
+   * The portable version runs immediately upon launch without requiring installation.
+
+### Method 2: One-Click Launch Script
+If you downloaded or cloned the repository:
+
+1. Double-click `start.bat` in the project root folder.
+2. The script checks for Node.js, installs dependencies automatically on first run, and launches Orphy in the background without keeping a console window open.
+
+### Method 3: Manual Terminal Setup
+For developers working directly with the source code:
+
 1. Clone the repository:
    ```bash
    git clone https://github.com/codebreaker77/Orphy.git
@@ -63,10 +80,23 @@ Orphy operates using a multi-window architecture designed for low overhead and s
    npm install
    ```
 
-3. Start the application:
+3. Launch the application:
    ```bash
    npm start
    ```
+
+### Packaging Standalone Binaries
+To build your own installer or portable executable from source:
+
+* Generate Windows installer and portable binary:
+  ```bash
+  npm run dist
+  ```
+* Generate portable single executable only:
+  ```bash
+  npm run dist:portable
+  ```
+Packaged binaries are output to the `dist/` directory.
 
 ---
 
